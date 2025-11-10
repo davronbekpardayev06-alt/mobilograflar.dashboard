@@ -7,10 +7,12 @@ export default function KiritishPage() {
   const [mobilographers, setMobilographers] = useState<any[]>([])
   const [projects, setProjects] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
   const [newRecord, setNewRecord] = useState({
     mobilographer_id: '',
     project_id: '',
     type: 'editing',
+    count: 1,
     date: new Date().toISOString().split('T')[0],
     time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
     notes: ''
@@ -44,37 +46,96 @@ export default function KiritishPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!newRecord.mobilographer_id || !newRecord.project_id) {
+    if (!newRecord.mobilographer_id || !newRecord.project_id || newRecord.count < 1) {
       alert('Iltimos, barcha majburiy maydonlarni to\'ldiring!')
       return
     }
 
+    setSubmitting(true)
+
     try {
-      const { error } = await supabase
-        .from('records')
-        .insert([{
+      // 1. Record yaratish (har bir ish uchun)
+      const recordsToInsert = []
+      for (let i = 0; i < newRecord.count; i++) {
+        recordsToInsert.push({
           mobilographer_id: newRecord.mobilographer_id,
           project_id: newRecord.project_id,
           type: newRecord.type,
           date: newRecord.date,
           time: newRecord.time || null,
           notes: newRecord.notes || null
-        }])
+        })
+      }
 
-      if (error) throw error
+      const { error: recordError } = await supabase
+        .from('records')
+        .insert(recordsToInsert)
 
-      alert('✅ Yozuv muvaffaqiyatli qo\'shildi!')
+      if (recordError) throw recordError
+
+      // 2. Agar MONTAJ bo'lsa, videolarni tugallangan deb belgilash
+      if (newRecord.type === 'editing') {
+        // Loyihaning pending videolarini topish
+        const { data: pendingVideos } = await supabase
+          .from('videos')
+          .select('id')
+          .eq('project_id', newRecord.project_id)
+          .eq('editing_status', 'pending')
+          .limit(newRecord.count)
+
+        if (pendingVideos && pendingVideos.length > 0) {
+          // Mavjud videolarni completed qilish
+          const videoIds = pendingVideos.map(v => v.id)
+          await supabase
+            .from('videos')
+            .update({ editing_status: 'completed' })
+            .in('id', videoIds)
+        } else {
+          // Agar pending video yo'q bo'lsa, yangi videolar yaratish
+          const videosToInsert = []
+          for (let i = 0; i < newRecord.count; i++) {
+            videosToInsert.push({
+              project_id: newRecord.project_id,
+              name: `Video ${Date.now()}-${i + 1}`,
+              filming_status: 'completed',
+              editing_status: 'completed'
+            })
+          }
+          await supabase.from('videos').insert(videosToInsert)
+        }
+      }
+
+      // 3. Agar SYOMKA bo'lsa, yangi videolar yaratish
+      if (newRecord.type === 'filming') {
+        const videosToInsert = []
+        for (let i = 0; i < newRecord.count; i++) {
+          videosToInsert.push({
+            project_id: newRecord.project_id,
+            name: `Video ${Date.now()}-${i + 1}`,
+            filming_status: 'completed',
+            editing_status: 'pending'
+          })
+        }
+        await supabase.from('videos').insert(videosToInsert)
+      }
+
+      alert(`✅ ${newRecord.count} ta ${newRecord.type === 'editing' ? 'montaj' : 'syomka'} muvaffaqiyatli qo'shildi!`)
+      
       setNewRecord({
         mobilographer_id: '',
         project_id: '',
         type: 'editing',
+        count: 1,
         date: new Date().toISOString().split('T')[0],
         time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
         notes: ''
       })
+      
+      setSubmitting(false)
     } catch (error) {
       console.error('Error:', error)
       alert('❌ Xatolik yuz berdi!')
+      setSubmitting(false)
     }
   }
 
@@ -196,6 +257,25 @@ export default function KiritishPage() {
             </div>
           </div>
 
+          {/* SON KIRITISH - YANGI! */}
+          <div>
+            <label className="block text-sm font-medium mb-2">
+              🔢 Nechta {newRecord.type === 'editing' ? 'montaj' : 'syomka'} qilindi?
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="50"
+              value={newRecord.count}
+              onChange={(e) => setNewRecord({ ...newRecord, count: parseInt(e.target.value) || 1 })}
+              className="input-modern text-2xl font-bold text-center"
+              required
+            />
+            <p className="text-sm text-gray-500 mt-2">
+              {newRecord.count} ta video {newRecord.type === 'editing' ? 'montaj qilindi' : 'suratga olindi'}
+            </p>
+          </div>
+
           {/* Izoh */}
           <div>
             <label className="block text-sm font-medium mb-2">
@@ -213,9 +293,17 @@ export default function KiritishPage() {
           {/* Submit button */}
           <button
             type="submit"
-            className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white py-4 rounded-xl font-semibold text-lg transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl"
+            disabled={submitting}
+            className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white py-4 rounded-xl font-semibold text-lg transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            ✅ Saqlash
+            {submitting ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="animate-spin">⏳</span>
+                Yuklanmoqda...
+              </span>
+            ) : (
+              `✅ ${newRecord.count} ta Saqlash`
+            )}
           </button>
         </form>
       </div>
@@ -225,13 +313,13 @@ export default function KiritishPage() {
         <div className="bg-gradient-to-br from-purple-100 to-purple-200 rounded-xl p-6">
           <div className="text-4xl mb-3">🎬</div>
           <h3 className="font-bold text-lg mb-1">Montaj</h3>
-          <p className="text-sm text-gray-700">Video tahrirlash va montaj ishlari</p>
+          <p className="text-sm text-gray-700">Video tahrirlash tugallandi</p>
         </div>
 
         <div className="bg-gradient-to-br from-blue-100 to-blue-200 rounded-xl p-6">
           <div className="text-4xl mb-3">📹</div>
           <h3 className="font-bold text-lg mb-1">Syomka</h3>
-          <p className="text-sm text-gray-700">Video suratga olish ishlari</p>
+          <p className="text-sm text-gray-700">Video suratga olindi</p>
         </div>
       </div>
     </div>
