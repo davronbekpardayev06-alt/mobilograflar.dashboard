@@ -7,8 +7,9 @@ export default function HaftalikPage() {
   const [weeklyData, setWeeklyData] = useState<any>({
     totalMontaj: 0,
     totalSyomka: 0,
-    totalVideos: 0,
-    mobilographers: []
+    totalWork: 0,
+    mobilographers: [],
+    dateRange: ''
   })
   const [loading, setLoading] = useState(true)
 
@@ -20,23 +21,33 @@ export default function HaftalikPage() {
     try {
       const today = new Date()
       const weekStart = new Date(today)
-      weekStart.setDate(today.getDate() - 6) // Oxirgi 6 kun + bugun = 7 kun
+      weekStart.setDate(today.getDate() - 6)
       
       const startDate = weekStart.toISOString().split('T')[0]
       const endDate = today.toISOString().split('T')[0]
 
+      // Haftalik records
       const { data: records } = await supabase
         .from('records')
         .select('*, mobilographers(id, name)')
         .gte('date', startDate)
         .lte('date', endDate)
 
-      const montajRecords = records?.filter(r => r.type === 'editing') || []
-      const syomkaRecords = records?.filter(r => r.type === 'filming') || []
+      // Count'larni hisobga olish
+      let totalMontaj = 0
+      let totalSyomka = 0
 
-      // Mobilograflar bo'yicha guruhlash
       const mobilographersMap = new Map()
+      
       records?.forEach(record => {
+        const count = record.count || 1
+        
+        if (record.type === 'editing') {
+          totalMontaj += count
+        } else if (record.type === 'filming') {
+          totalSyomka += count
+        }
+
         const mobId = record.mobilographers?.id
         if (!mobId) return
 
@@ -51,15 +62,15 @@ export default function HaftalikPage() {
         }
 
         const mob = mobilographersMap.get(mobId)
-        if (record.type === 'editing') mob.montaj++
-        if (record.type === 'filming') mob.syomka++
-        mob.total++
+        if (record.type === 'editing') mob.montaj += count
+        if (record.type === 'filming') mob.syomka += count
+        mob.total += count
       })
 
       setWeeklyData({
-        totalMontaj: montajRecords.length,
-        totalSyomka: syomkaRecords.length,
-        totalVideos: records?.length || 0,
+        totalMontaj,
+        totalSyomka,
+        totalWork: totalMontaj + totalSyomka,
         mobilographers: Array.from(mobilographersMap.values()).sort((a, b) => b.total - a.total),
         dateRange: `${weekStart.toLocaleDateString('uz-UZ')} - ${today.toLocaleDateString('uz-UZ')}`
       })
@@ -96,9 +107,9 @@ export default function HaftalikPage() {
         <div className="bg-gradient-to-br from-green-500 to-emerald-600 text-white rounded-2xl p-6 shadow-lg card-hover">
           <div className="flex items-center gap-3 mb-3">
             <span className="text-4xl">📊</span>
-            <span className="text-lg opacity-90">Jami Video</span>
+            <span className="text-lg opacity-90">Jami Ish</span>
           </div>
-          <div className="text-5xl font-bold">{weeklyData.totalVideos}</div>
+          <div className="text-5xl font-bold">{weeklyData.totalWork}</div>
           <p className="text-sm opacity-90 mt-2">Oxirgi 7 kun</p>
         </div>
 
