@@ -2,7 +2,7 @@
 
 import './globals.css'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 
 export default function RootLayout({
@@ -11,6 +11,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+  const router = useRouter()
   const [currentTime, setCurrentTime] = useState('')
 
   useEffect(() => {
@@ -26,6 +27,33 @@ export default function RootLayout({
     const interval = setInterval(updateTime, 1000)
     return () => clearInterval(interval)
   }, [])
+
+  const handleRefresh = () => {
+    window.location.reload()
+  }
+
+  const handleExport = async () => {
+    try {
+      // CSV formatida export
+      const response = await fetch('/api/export')
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `mobilograflar-hisobot-${new Date().toISOString().split('T')[0]}.csv`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+      } else {
+        alert('Excel yuklab bo\'lmadi. Iltimos qaytadan urinib ko\'ring.')
+      }
+    } catch (error) {
+      console.error('Export error:', error)
+      alert('Xatolik yuz berdi!')
+    }
+  }
 
   const tabs = [
     { name: 'Asosiy', path: '/', icon: '🏠' },
@@ -61,10 +89,16 @@ export default function RootLayout({
                   <div className="text-gray-600 font-medium text-lg">
                     {currentTime}
                   </div>
-                  <button className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-2.5 rounded-xl flex items-center gap-2 transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl">
+                  <button 
+                    onClick={handleRefresh}
+                    className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-2.5 rounded-xl flex items-center gap-2 transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl"
+                  >
                     🔄 Yangilash
                   </button>
-                  <button className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-6 py-2.5 rounded-xl flex items-center gap-2 transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl">
+                  <button 
+                    onClick={handleExport}
+                    className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-6 py-2.5 rounded-xl flex items-center gap-2 transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl"
+                  >
                     📥 Excel
                   </button>
                 </div>
