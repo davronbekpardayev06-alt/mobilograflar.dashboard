@@ -221,4 +221,19 @@ export default function KiritishPage() {
       </div>
 
       {/* Info cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+        <div className="bg-gradient-to-br from-purple-100 to-purple-200 rounded-xl p-6">
+          <div className="text-4xl mb-3">🎬</div>
+          <h3 className="font-bold text-lg mb-1">Montaj</h3>
+          <p className="text-sm text-gray-700">Video tahrirlash va montaj ishlari</p>
+        </div>
+
+        <div className="bg-gradient-to-br from-blue-100 to-blue-200 rounded-xl p-6">
+          <div className="text-4xl mb-3">📹</div>
+          <h3 className="font-bold text-lg mb-1">Syomka</h3>
+          <p className="text-sm text-gray-700">Video suratga olish ishlari</p>
+        </div>
+      </div>
+    </div>
+  )
+}
