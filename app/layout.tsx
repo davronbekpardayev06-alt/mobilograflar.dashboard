@@ -13,6 +13,7 @@ export default function RootLayout({
   const pathname = usePathname()
   const router = useRouter()
   const [currentTime, setCurrentTime] = useState('')
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   useEffect(() => {
     const updateTime = () => {
@@ -29,7 +30,10 @@ export default function RootLayout({
   }, [])
 
   const handleRefresh = () => {
-    window.location.reload()
+    setIsRefreshing(true)
+    setTimeout(() => {
+      window.location.reload()
+    }, 300)
   }
 
   const handleExport = async () => {
@@ -91,9 +95,11 @@ export default function RootLayout({
                   </div>
                   <button 
                     onClick={handleRefresh}
-                    className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-2.5 rounded-xl flex items-center gap-2 transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl"
+                    disabled={isRefreshing}
+                    className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-2.5 rounded-xl flex items-center gap-2 transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    🔄 Yangilash
+                    <span className={isRefreshing ? 'animate-spin' : ''}>🔄</span>
+                    Yangilash
                   </button>
                   <button 
                     onClick={handleExport}
