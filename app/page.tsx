@@ -8,7 +8,7 @@ export default function Home() {
     mobilographers: 0,
     projects: 0,
     totalVideos: 0,
-    todayVideos: 0
+    todayWork: 0
   })
   const [loading, setLoading] = useState(true)
   const [overallProgress, setOverallProgress] = useState({ 
@@ -64,7 +64,7 @@ export default function Home() {
         mobilographers: mobilographers?.length || 0,
         projects: projects?.length || 0,
         totalVideos,
-        todayVideos: todayRecords?.length || 0
+        todayWork: todayRecords?.length || 0
       })
 
       setOverallProgress({
@@ -114,7 +114,7 @@ export default function Home() {
         <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl p-6 shadow-lg card-hover">
           <div className="flex items-center gap-3 mb-3">
             <span className="text-4xl">🎥</span>
-            <span className="text-lg opacity-90">Jami Yozuvlar</span>
+            <span className="text-lg opacity-90">Jami Videolar</span>
           </div>
           <div className="text-5xl font-bold">{stats.totalVideos}</div>
         </div>
@@ -124,7 +124,7 @@ export default function Home() {
             <span className="text-4xl">⏰</span>
             <span className="text-lg opacity-90">Bugun</span>
           </div>
-          <div className="text-5xl font-bold">{stats.todayVideos}</div>
+          <div className="text-5xl font-bold">{stats.todayWork}</div>
         </div>
       </div>
 
@@ -181,6 +181,12 @@ export default function Home() {
             )}
           </p>
         </div>
+      </div>
+
+      {/* Kim nima qilyapti */}
+      <div className="card-modern">
+        <h2 className="text-2xl font-bold mb-4">👀 Kim Nima Qilyapti? (Bugun)</h2>
+        <p className="text-gray-500">Bugun faoliyat yo'q</p>
       </div>
     </div>
   )
