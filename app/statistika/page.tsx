@@ -13,37 +13,34 @@ export default function StatistikaPage() {
 
   const fetchData = async () => {
     try {
+      // Barcha mobilograflarni olish
       const { data: mobilographers } = await supabase
         .from('mobilographers')
-        .select(`
-          *,
-          projects (
-            id,
-            name,
-            videos (
-              id,
-              editing_status,
-              filming_status
-            )
-          )
-        `)
+        .select('*')
         .order('name')
 
+      // Barcha records'ni olish
+      const { data: records } = await supabase
+        .from('records')
+        .select('*')
+
       const statsWithTotals = mobilographers?.map(m => {
+        // SHU MOBILOGRAFNING records'lari (KIM QILGANI!)
+        const mobilographerRecords = records?.filter(r => 
+          r.mobilographer_id === m.id
+        ) || []
+        
+        // Count'ni hisobga olish
         let montajCount = 0
         let syomkaCount = 0
         
-        m.projects?.forEach((project: any) => {
-          const completedVideos = project.videos?.filter((v: any) => 
-            v.editing_status === 'completed'
-          ) || []
-          
-          const filmedVideos = project.videos?.filter((v: any) => 
-            v.filming_status === 'completed'
-          ) || []
-          
-          montajCount += completedVideos.length
-          syomkaCount += filmedVideos.length
+        mobilographerRecords.forEach(record => {
+          const count = record.count || 1
+          if (record.type === 'editing') {
+            montajCount += count
+          } else if (record.type === 'filming') {
+            syomkaCount += count
+          }
         })
         
         return {
@@ -105,7 +102,7 @@ export default function StatistikaPage() {
         <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl p-6 shadow-lg card-hover">
           <div className="flex items-center gap-3 mb-3">
             <span className="text-4xl">📊</span>
-            <span className="text-lg opacity-90">Jami Video</span>
+            <span className="text-lg opacity-90">Jami Ish</span>
           </div>
           <div className="text-5xl font-bold">{totalMontaj + totalSyomka}</div>
           <p className="text-sm opacity-90 mt-2">Barcha ishlar</p>
