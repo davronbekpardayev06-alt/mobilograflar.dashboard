@@ -7,9 +7,10 @@ export default function OylikPage() {
   const [monthlyData, setMonthlyData] = useState<any>({
     totalMontaj: 0,
     totalSyomka: 0,
-    totalVideos: 0,
+    totalWork: 0,
     mobilographers: [],
-    projects: []
+    projects: [],
+    monthName: ''
   })
   const [loading, setLoading] = useState(true)
 
@@ -25,14 +26,14 @@ export default function OylikPage() {
       const startDate = monthStart.toISOString().split('T')[0]
       const endDate = today.toISOString().split('T')[0]
 
-      // Records
+      // Oylik records
       const { data: records } = await supabase
         .from('records')
         .select('*, mobilographers(id, name), projects(id, name)')
         .gte('date', startDate)
         .lte('date', endDate)
 
-      // Projects with videos
+      // Loyihalar
       const { data: projects } = await supabase
         .from('projects')
         .select(`
@@ -41,12 +42,20 @@ export default function OylikPage() {
           videos(id, editing_status)
         `)
 
-      const montajCount = records?.filter(r => r.type === 'editing').length || 0
-      const syomkaCount = records?.filter(r => r.type === 'filming').length || 0
-
-      // Mobilograflar statistikasi
+      // Count'larni hisobga olish
+      let totalMontaj = 0
+      let totalSyomka = 0
       const mobilographersMap = new Map()
+
       records?.forEach(record => {
+        const count = record.count || 1
+        
+        if (record.type === 'editing') {
+          totalMontaj += count
+        } else if (record.type === 'filming') {
+          totalSyomka += count
+        }
+
         const mobId = record.mobilographers?.id
         if (!mobId) return
 
@@ -61,9 +70,9 @@ export default function OylikPage() {
         }
 
         const mob = mobilographersMap.get(mobId)
-        if (record.type === 'editing') mob.montaj++
-        if (record.type === 'filming') mob.syomka++
-        mob.total++
+        if (record.type === 'editing') mob.montaj += count
+        if (record.type === 'filming') mob.syomka += count
+        mob.total += count
       })
 
       // Loyihalar progress
@@ -83,9 +92,9 @@ export default function OylikPage() {
       }).sort((a, b) => b.progress - a.progress)
 
       setMonthlyData({
-        totalMontaj: montajCount,
-        totalSyomka: syomkaCount,
-        totalVideos: records?.length || 0,
+        totalMontaj,
+        totalSyomka,
+        totalWork: totalMontaj + totalSyomka,
         mobilographers: Array.from(mobilographersMap.values()).sort((a, b) => b.total - a.total),
         projects: projectsWithProgress || [],
         monthName: today.toLocaleDateString('uz-UZ', { month: 'long', year: 'numeric' })
@@ -123,9 +132,9 @@ export default function OylikPage() {
         <div className="bg-gradient-to-br from-orange-500 to-red-600 text-white rounded-2xl p-6 shadow-lg card-hover">
           <div className="flex items-center gap-3 mb-3">
             <span className="text-4xl">📊</span>
-            <span className="text-lg opacity-90">Jami Video</span>
+            <span className="text-lg opacity-90">Jami Ish</span>
           </div>
-          <div className="text-5xl font-bold">{monthlyData.totalVideos}</div>
+          <div className="text-5xl font-bold">{monthlyData.totalWork}</div>
           <p className="text-sm opacity-90 mt-2">Bu oyda</p>
         </div>
 
