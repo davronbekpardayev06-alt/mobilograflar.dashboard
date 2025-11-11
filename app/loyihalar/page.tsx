@@ -19,21 +19,28 @@ export default function LoyihalarPage() {
         .select(`
           *,
           mobilographers(name),
-          videos(id, editing_status, content_type, deadline, created_at, record_id)
+          videos(id, editing_status, filming_status, content_type, task_type, deadline, created_at, record_id)
         `)
         .order('name')
 
       const projectsWithProgress = data?.map(project => {
-        // FAQAT SHU OYNING POST'LARINI HISOBLASH - FAQAT KIRITISHDAN!
+        // FAQAT SHU OYNING MONTAJ POST'LARINI HISOBLASH - FAQAT KIRITISHDAN!
         const now = new Date()
         const currentMonth = now.getMonth()
         const currentYear = now.getFullYear()
         
         const thisMonthVideos = project.videos?.filter((v: any) => {
-          // FAQAT KIRITISHDAN YARATILGAN POST'LAR!
+          // FAQAT MONTAJ TASK_TYPE!
+          if (v.task_type !== 'montaj') return false
+          
+          // FAQAT POST CONTENT_TYPE!
+          if (v.content_type !== 'post') return false
+          
+          // FAQAT COMPLETED EDITING_STATUS!
           if (v.editing_status !== 'completed') return false
-          if (v.content_type !== 'post') return false  // FAQAT POST!
-          if (!v.record_id) return false  // FAQAT KIRITISHDAN!
+          
+          // FAQAT KIRITISHDAN (record_id bor)!
+          if (!v.record_id) return false
           
           const videoDate = new Date(v.created_at)
           return videoDate.getMonth() === currentMonth && videoDate.getFullYear() === currentYear
@@ -139,7 +146,7 @@ export default function LoyihalarPage() {
           <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
             📁 Loyihalar
           </h1>
-          <p className="text-sm text-gray-500 mt-1">📅 {getCurrentMonthName()} - Oylik Progress (Faqat POST)</p>
+          <p className="text-sm text-gray-500 mt-1">📅 {getCurrentMonthName()} - Oylik Progress (Faqat MONTAJ POST)</p>
         </div>
         <Link href="/loyihalar/yangi">
           <button className="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white px-6 py-3 rounded-xl font-semibold flex items-center gap-2 transition transform hover:scale-105">
@@ -174,7 +181,7 @@ export default function LoyihalarPage() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-gray-700">
-                      📄 {project.completed}/{project.target} post (shu oy)
+                      📄 {project.completed}/{project.target} post montaj (shu oy)
                     </span>
                     <span className={`text-2xl font-bold ${
                       project.progress >= 100 ? 'text-green-600' :
@@ -210,13 +217,13 @@ export default function LoyihalarPage() {
 
                   {project.progress < 100 && (
                     <div className="bg-blue-50 text-blue-700 px-3 py-2 rounded-lg text-center text-sm">
-                      📊 Yana {project.target - project.completed} ta post kerak
+                      📊 Yana {project.target - project.completed} ta post montaj kerak
                     </div>
                   )}
                 </div>
 
                 <div className="text-xs text-gray-400 mt-3 pt-3 border-t">
-                  🎯 Oylik maqsad: {project.target} post
+                  🎯 Oylik maqsad: {project.target} post montaj
                 </div>
               </div>
             )
