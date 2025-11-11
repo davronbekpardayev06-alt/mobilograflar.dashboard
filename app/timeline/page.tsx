@@ -36,7 +36,7 @@ export default function TimelinePage() {
         .select('*')
         .order('name')
 
-      // Records olish
+      // Records olish (qilingan ishlar)
       const { data: records } = await supabase
         .from('records')
         .select(`
@@ -47,7 +47,7 @@ export default function TimelinePage() {
         .gte('date', pastWeek.toISOString().split('T')[0])
         .lte('date', today.toISOString().split('T')[0])
 
-      // Videos (rejalar) olish
+      // Videos (rejalar) olish - FAQAT REJA (record_id IS NULL)
       const { data: allVideos } = await supabase
         .from('videos')
         .select(`
@@ -57,7 +57,7 @@ export default function TimelinePage() {
         `)
         .gte('deadline', pastWeek.toISOString().split('T')[0])
         .lte('deadline', futureWeek.toISOString().split('T')[0])
-        .neq('editing_status', 'completed')
+        .is('record_id', null)  // FAQAT REJALAR!
 
       // Loyihalarni olish
       const { data: projectsData } = await supabase
