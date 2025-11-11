@@ -20,12 +20,10 @@ export default function Home() {
 
   const fetchData = async () => {
     try {
-      // Mobilograflar
       const { data: mobilographers } = await supabase
         .from('mobilographers')
         .select('*')
 
-      // Loyihalar va videolar
       const { data: projects } = await supabase
         .from('projects')
         .select(`
@@ -34,11 +32,11 @@ export default function Home() {
           videos (
             id,
             editing_status,
+            content_type,
             deadline
           )
         `)
 
-      // Bugungi faoliyat
       const today = new Date().toISOString().split('T')[0]
       
       const { data: todayRecords } = await supabase
@@ -46,7 +44,6 @@ export default function Home() {
         .select('*')
         .eq('date', today)
 
-      // Oxirgi 5 ta faoliyat
       const { data: recentRecords } = await supabase
         .from('records')
         .select(`
@@ -59,15 +56,14 @@ export default function Home() {
 
       const totalVideos = projects?.reduce((sum, p) => sum + (p.videos?.length || 0), 0) || 0
 
-      // Loyihalar holati
       const projectsWithStatus = projects?.map(project => {
+        // FAQAT POST'larni hisoblash!
         const completed = project.videos?.filter((v: any) => 
-          v.editing_status === 'completed'
+          v.editing_status === 'completed' && v.content_type === 'post'
         ).length || 0
         const target = project.monthly_target || 12
         const progress = Math.round((completed / target) * 100)
         
-        // Eng yaqin deadline
         const nearestDeadline = project.videos
           ?.filter((v: any) => v.deadline && v.editing_status !== 'completed')
           .sort((a: any, b: any) => 
@@ -82,7 +78,6 @@ export default function Home() {
           nearestDeadline: nearestDeadline?.deadline
         }
       }).sort((a, b) => {
-        // Deadline yaqin bo'lganlarni birinchi
         if (a.nearestDeadline && !b.nearestDeadline) return -1
         if (!a.nearestDeadline && b.nearestDeadline) return 1
         if (a.nearestDeadline && b.nearestDeadline) {
@@ -191,7 +186,9 @@ export default function Home() {
               <div key={activity.id} className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border border-blue-200">
                 <div className="flex items-center gap-4">
                   <span className="text-4xl">
-                    {activity.type === 'editing' ? '🎬' : '📹'}
+                    {activity.type === 'editing' 
+                      ? activity.content_type === 'post' ? '📄' : '📱'
+                      : '📹'}
                   </span>
                   <div>
                     <p className="font-bold text-lg">{activity.mobilographers?.name}</p>
@@ -205,10 +202,14 @@ export default function Home() {
                 <div className="text-right">
                   <span className={`px-4 py-2 rounded-lg font-bold text-sm ${
                     activity.type === 'editing' 
-                      ? 'bg-purple-100 text-purple-700'
+                      ? activity.content_type === 'post'
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-pink-100 text-pink-700'
                       : 'bg-blue-100 text-blue-700'
                   }`}>
-                    {activity.type === 'editing' ? '🎬 MONTAJ' : '📹 SYOMKA'}
+                    {activity.type === 'editing' 
+                      ? activity.content_type === 'post' ? '📄 POST' : '📱 STORIS'
+                      : '📹 SYOMKA'}
                   </span>
                   {activity.count && activity.count > 1 && (
                     <p className="text-2xl font-bold text-gray-700 mt-2">{activity.count}x</p>
@@ -268,7 +269,7 @@ export default function Home() {
 
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-600">
-                      {project.completed}/{project.target} video
+                      📄 {project.completed}/{project.target} post
                     </span>
                     {deadlineInfo && (
                       <span className={`font-bold ${deadlineInfo.color}`}>
