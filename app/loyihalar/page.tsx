@@ -1,82 +1,120 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
-export default function YangiLoyihaPage() {
-  const router = useRouter()
-  const [mobilographers, setMobilographers] = useState<any[]>([])
+export default function LoyihalarPage() {
+  const [projects, setProjects] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
-  const [newProject, setNewProject] = useState({
-    name: '',
-    mobilographer_id: '',
-    monthly_target: 12,
-    description: ''
-  })
 
   useEffect(() => {
-    fetchMobilographers()
+    fetchData()
   }, [])
 
-  const fetchMobilographers = async () => {
+  const fetchData = async () => {
     try {
       const { data } = await supabase
-        .from('mobilographers')
-        .select('*')
+        .from('projects')
+        .select(`
+          *,
+          mobilographers(name),
+          videos(id, editing_status, content_type, deadline, created_at)
+        `)
         .order('name')
 
-      setMobilographers(data || [])
+      const projectsWithProgress = data?.map(project => {
+        // FAQAT SHU OYNING POST'LARINI HISOBLASH!
+        const now = new Date()
+        const currentMonth = now.getMonth()
+        const currentYear = now.getFullYear()
+        
+        const thisMonthVideos = project.videos?.filter((v: any) => {
+          if (v.editing_status !== 'completed' || v.content_type !== 'post') return false
+          const videoDate = new Date(v.created_at)
+          return videoDate.getMonth() === currentMonth && videoDate.getFullYear() === currentYear
+        })
+        
+        const completed = thisMonthVideos?.length || 0
+        const target = project.monthly_target || 12
+        const progress = Math.round((completed / target) * 100)
+
+        const nearestDeadline = project.videos
+          ?.filter((v: any) => v.deadline && v.editing_status !== 'completed')
+          .sort((a: any, b: any) => 
+            new Date(a.deadline).getTime() - new Date(b.deadline).getTime()
+          )[0]
+
+        return {
+          ...project,
+          completed,
+          target,
+          progress,
+          nearestDeadline: nearestDeadline?.deadline
+        }
+      }).sort((a, b) => {
+        if (a.nearestDeadline && !b.nearestDeadline) return -1
+        if (!a.nearestDeadline && b.nearestDeadline) return 1
+        if (a.nearestDeadline && b.nearestDeadline) {
+          return new Date(a.nearestDeadline).getTime() - new Date(b.nearestDeadline).getTime()
+        }
+        return b.progress - a.progress
+      })
+
+      setProjects(projectsWithProgress || [])
       setLoading(false)
     } catch (error) {
-      console.error('Error fetching mobilographers:', error)
+      console.error('Error:', error)
       setLoading(false)
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (!newProject.name || !newProject.mobilographer_id) {
-      alert('Loyiha nomi va mobilografni tanlang!')
-      return
+  const getDeadlineInfo = (deadline: string | null) => {
+    if (!deadline) return null
+    
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const deadlineDate = new Date(deadline)
+    deadlineDate.setHours(0, 0, 0, 0)
+    const diffDays = Math.ceil((deadlineDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+    
+    if (diffDays < 0) {
+      return { text: `${Math.abs(diffDays)} kun kechikdi`, color: 'text-red-600', bgColor: 'bg-red-50', borderColor: 'border-red-400' }
     }
+    if (diffDays === 0) {
+      return { text: 'Bugun!', color: 'text-red-600', bgColor: 'bg-red-50', borderColor: 'border-red-400' }
+    }
+    if (diffDays <= 3) {
+      return { text: `${diffDays} kun qoldi`, color: 'text-orange-600', bgColor: 'bg-orange-50', borderColor: 'border-orange-400' }
+    }
+    if (diffDays <= 7) {
+      return { text: `${diffDays} kun qoldi`, color: 'text-yellow-600', bgColor: 'bg-yellow-50', borderColor: 'border-yellow-400' }
+    }
+    return { text: `${diffDays} kun qoldi`, color: 'text-green-600', bgColor: 'bg-green-50', borderColor: 'border-green-400' }
+  }
 
-    setSubmitting(true)
+  const handleDelete = async (id: string) => {
+    if (!confirm('Bu loyihani o\'chirmoqchimisiz?')) return
 
     try {
-      console.log('Creating project with data:', {
-        name: newProject.name,
-        mobilographer_id: newProject.mobilographer_id,
-        monthly_target: newProject.monthly_target,
-        description: newProject.description || null
-      })
-
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('projects')
-        .insert([{
-          name: newProject.name,
-          mobilographer_id: newProject.mobilographer_id,
-          monthly_target: parseInt(newProject.monthly_target.toString()) || 12,
-          description: newProject.description || null
-        }])
-        .select()
+        .delete()
+        .eq('id', id)
 
-      console.log('Insert response:', { data, error })
+      if (error) throw error
 
-      if (error) {
-        console.error('Supabase error:', error)
-        throw error
-      }
-
-      alert('✅ Loyiha yaratildi!')
-      router.push('/loyihalar')
-    } catch (error: any) {
-      console.error('Error creating project:', error)
-      alert('❌ Xatolik: ' + (error?.message || 'Noma\'lum xatolik'))
-      setSubmitting(false)
+      alert('✅ Loyiha o\'chirildi!')
+      fetchData()
+    } catch (error) {
+      console.error('Error:', error)
+      alert('❌ Xatolik yuz berdi!')
     }
+  }
+
+  const getCurrentMonthName = () => {
+    const now = new Date()
+    return now.toLocaleDateString('uz-UZ', { month: 'long', year: 'numeric' })
   }
 
   if (loading) {
@@ -92,102 +130,105 @@ export default function YangiLoyihaPage() {
 
   return (
     <div className="space-y-6 animate-slide-in">
-      <div className="flex items-center gap-4">
-        <button
-          onClick={() => router.push('/loyihalar')}
-          className="text-gray-600 hover:text-gray-800 text-2xl"
-        >
-          ← Orqaga
-        </button>
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-          ➕ Yangi Loyiha Yaratish
-        </h1>
-      </div>
-
-      <div className="max-w-2xl mx-auto">
-        <div className="bg-white rounded-3xl shadow-2xl border-2 border-gray-100 p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="block text-sm font-semibold mb-2 text-gray-700">
-                📁 Loyiha nomi *
-              </label>
-              <input
-                type="text"
-                value={newProject.name}
-                onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
-                placeholder="Masalan: Mars IT"
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all outline-none text-lg"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold mb-2 text-gray-700">
-                👤 Mas'ul mobilograf *
-              </label>
-              <select
-                value={newProject.mobilographer_id}
-                onChange={(e) => setNewProject({ ...newProject, mobilographer_id: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all outline-none text-lg"
-                required
-              >
-                <option value="">Tanlang...</option>
-                {mobilographers.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold mb-2 text-gray-700">
-                🎯 Oylik maqsad (nechta post) *
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="100"
-                value={newProject.monthly_target}
-                onChange={(e) => setNewProject({ ...newProject, monthly_target: parseInt(e.target.value) || 12 })}
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all outline-none text-lg"
-                required
-              />
-              <p className="text-sm text-gray-500 mt-2">
-                Har oyda {newProject.monthly_target} ta post tayyorlanishi kerak
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold mb-2 text-gray-700">
-                📝 Tavsif (ixtiyoriy)
-              </label>
-              <textarea
-                value={newProject.description}
-                onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
-                placeholder="Loyiha haqida qisqacha..."
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all outline-none"
-                rows={3}
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white py-4 rounded-2xl font-bold text-xl transition-all duration-200 transform hover:scale-105 shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {submitting ? (
-                <span className="flex items-center justify-center gap-3">
-                  <span className="animate-spin text-2xl">⏳</span>
-                  Yuklanmoqda...
-                </span>
-              ) : (
-                '✅ Loyiha Yaratish'
-              )}
-            </button>
-          </form>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+            📁 Loyihalar
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">📅 {getCurrentMonthName()} - Oylik Progress</p>
         </div>
+        <Link href="/loyihalar/yangi">
+          <button className="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white px-6 py-3 rounded-xl font-semibold flex items-center gap-2 transition transform hover:scale-105">
+            ➕ Yangi Loyiha
+          </button>
+        </Link>
       </div>
+
+      {projects.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {projects.map((project) => {
+            const deadlineInfo = getDeadlineInfo(project.nearestDeadline)
+            
+            return (
+              <div
+                key={project.id}
+                className={`card-modern border-2 ${deadlineInfo?.borderColor || 'border-gray-200'} ${deadlineInfo?.bgColor || ''} hover:shadow-xl transition-all`}
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1">
+                    <h3 className="text-xl font-bold mb-1">{project.name}</h3>
+                    <p className="text-sm text-gray-600">👤 {project.mobilographers?.name}</p>
+                  </div>
+                  <button
+                    onClick={() => handleDelete(project.id)}
+                    className="text-red-500 hover:text-red-700 text-2xl transition"
+                  >
+                    🗑️
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-700">
+                      📄 {project.completed}/{project.target} post (shu oy)
+                    </span>
+                    <span className={`text-2xl font-bold ${
+                      project.progress >= 100 ? 'text-green-600' :
+                      project.progress >= 75 ? 'text-yellow-600' :
+                      'text-blue-600'
+                    }`}>
+                      {project.progress}%
+                    </span>
+                  </div>
+
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div
+                      className={`progress-bar h-3 rounded-full ${
+                        project.progress >= 100 ? 'bg-green-500' :
+                        project.progress >= 75 ? 'bg-yellow-500' :
+                        'bg-blue-500'
+                      }`}
+                      style={{ width: `${Math.min(project.progress, 100)}%` }}
+                    />
+                  </div>
+
+                  {deadlineInfo && (
+                    <div className={`text-sm font-semibold ${deadlineInfo.color}`}>
+                      ⏰ {deadlineInfo.text}
+                    </div>
+                  )}
+
+                  {project.progress >= 100 && (
+                    <div className="bg-green-100 text-green-700 px-3 py-2 rounded-lg text-center font-bold text-sm">
+                      ✅ Shu oylik maqsad bajarildi!
+                    </div>
+                  )}
+
+                  {project.progress < 100 && (
+                    <div className="bg-blue-50 text-blue-700 px-3 py-2 rounded-lg text-center text-sm">
+                      📊 Yana {project.target - project.completed} ta post kerak
+                    </div>
+                  )}
+                </div>
+
+                <div className="text-xs text-gray-400 mt-3 pt-3 border-t">
+                  🎯 Oylik maqsad: {project.target} post
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="text-center py-12 bg-gray-50 rounded-xl">
+          <div className="text-6xl mb-4">📁</div>
+          <p className="text-gray-500 text-lg mb-4">Hozircha loyihalar yo'q</p>
+          <Link href="/loyihalar/yangi">
+            <button className="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white px-6 py-3 rounded-xl font-semibold">
+              ➕ Birinchi Loyiha Yaratish
+            </button>
+          </Link>
+        </div>
+      )}
     </div>
   )
 }
