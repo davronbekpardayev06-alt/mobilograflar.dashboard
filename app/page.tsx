@@ -65,10 +65,10 @@ export default function Home() {
         const currentYear = now.getFullYear()
         
         const thisMonthVideos = project.videos?.filter((v: any) => {
-          // FAQAT KIRITISHDAN YARATILGAN VA POST BO'LGAN VIDEOLAR!
+          // FAQAT KIRITISHDAN YARATILGAN POST'LAR!
           if (v.editing_status !== 'completed') return false
-          if (v.content_type !== 'post') return false
-          if (!v.record_id) return false  // MUHIM! Faqat kiritishdan yaratilgan
+          if (v.content_type !== 'post') return false  // FAQAT POST!
+          if (!v.record_id) return false  // FAQAT KIRITISHDAN!
           
           const videoDate = new Date(v.created_at)
           return videoDate.getMonth() === currentMonth && videoDate.getFullYear() === currentYear
@@ -243,7 +243,7 @@ export default function Home() {
       {/* Loyihalar Holati */}
       <div className="card-modern">
         <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-          📊 Loyihalar Holati (Shu Oylik Progress)
+          📊 Loyihalar Holati (Shu Oylik Progress - Faqat POST)
         </h2>
         
         {projectsStatus.length > 0 ? (
