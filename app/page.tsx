@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import Link from 'next/link'
 
 export default function Home() {
   const [stats, setStats] = useState({
@@ -32,7 +33,9 @@ export default function Home() {
           videos (
             id,
             editing_status,
+            filming_status,
             content_type,
+            task_type,
             deadline,
             created_at,
             record_id
@@ -56,19 +59,30 @@ export default function Home() {
         .order('created_at', { ascending: false })
         .limit(5)
 
-      const totalVideos = projects?.reduce((sum, p) => sum + (p.videos?.length || 0), 0) || 0
+      // FAQAT KIRITISHDAN (record_id bor) videolar hisoblash
+      const totalVideos = projects?.reduce((sum, p) => {
+        const kiritishVideos = p.videos?.filter((v: any) => v.record_id !== null) || []
+        return sum + kiritishVideos.length
+      }, 0) || 0
 
       const projectsWithStatus = projects?.map(project => {
-        // FAQAT SHU OYNING POST'LARINI HISOBLASH - FAQAT KIRITISHDAN!
+        // FAQAT SHU OYNING MONTAJ POST'LARINI HISOBLASH - FAQAT KIRITISHDAN!
         const now = new Date()
         const currentMonth = now.getMonth()
         const currentYear = now.getFullYear()
         
         const thisMonthVideos = project.videos?.filter((v: any) => {
-          // FAQAT KIRITISHDAN YARATILGAN POST'LAR!
+          // FAQAT MONTAJ TASK_TYPE!
+          if (v.task_type !== 'montaj') return false
+          
+          // FAQAT POST CONTENT_TYPE!
+          if (v.content_type !== 'post') return false
+          
+          // FAQAT COMPLETED EDITING_STATUS!
           if (v.editing_status !== 'completed') return false
-          if (v.content_type !== 'post') return false  // FAQAT POST!
-          if (!v.record_id) return false  // FAQAT KIRITISHDAN!
+          
+          // FAQAT KIRITISHDAN (record_id bor)!
+          if (!v.record_id) return false
           
           const videoDate = new Date(v.created_at)
           return videoDate.getMonth() === currentMonth && videoDate.getFullYear() === currentYear
@@ -177,6 +191,7 @@ export default function Home() {
             <span className="text-lg opacity-90">Jami Videolar</span>
           </div>
           <div className="text-5xl font-bold">{stats.totalVideos}</div>
+          <div className="text-xs opacity-80 mt-2">Faqat kiritish</div>
         </div>
 
         <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-2xl p-6 shadow-lg card-hover">
@@ -197,7 +212,7 @@ export default function Home() {
         {recentActivity.length > 0 ? (
           <div className="space-y-3">
             {recentActivity.map((activity) => (
-              <div key={activity.id} className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border border-blue-200">
+              <div key={activity.id} className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border border-blue-200 hover:shadow-md transition">
                 <div className="flex items-center gap-4">
                   <span className="text-4xl">
                     {activity.type === 'editing' 
@@ -208,8 +223,12 @@ export default function Home() {
                     <p className="font-bold text-lg">{activity.mobilographers?.name}</p>
                     <p className="text-sm text-gray-600">{activity.projects?.name}</p>
                     <p className="text-xs text-gray-400">
-                      {new Date(activity.created_at).toLocaleDateString('uz-UZ')} • 
-                      {new Date(activity.created_at).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(activity.created_at).toLocaleDateString('uz-UZ', { 
+                        day: 'numeric',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
                     </p>
                   </div>
                 </div>
@@ -242,22 +261,29 @@ export default function Home() {
 
       {/* Loyihalar Holati */}
       <div className="card-modern">
-        <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-          📊 Loyihalar Holati (Shu Oylik Progress - Faqat POST)
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            📊 Loyihalar Holati (Shu Oylik Progress - Faqat MONTAJ POST)
+          </h2>
+          <Link href="/loyihalar">
+            <button className="text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-2 transition">
+              Barchasini ko'rish →
+            </button>
+          </Link>
+        </div>
         
         {projectsStatus.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {projectsStatus.map((project) => {
+            {projectsStatus.slice(0, 6).map((project) => {
               const deadlineInfo = getDeadlineInfo(project.nearestDeadline)
               
               return (
                 <div
                   key={project.id}
-                  className={`card-modern border-2 ${deadlineInfo?.borderColor || 'border-gray-200'} ${deadlineInfo?.bgColor || ''}`}
+                  className={`card-modern border-2 ${deadlineInfo?.borderColor || 'border-gray-200'} ${deadlineInfo?.bgColor || ''} hover:shadow-lg transition`}
                 >
                   <div className="flex items-start justify-between mb-3">
-                    <div>
+                    <div className="flex-1">
                       <h3 className="text-lg font-bold">{project.name}</h3>
                       <p className="text-sm text-gray-600">👤 {project.mobilographers?.name}</p>
                     </div>
@@ -283,7 +309,7 @@ export default function Home() {
 
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-600">
-                      📄 {project.completed}/{project.target} post (shu oy)
+                      📄 {project.completed}/{project.target} post montaj
                     </span>
                     {deadlineInfo && (
                       <span className={`font-bold ${deadlineInfo.color}`}>
@@ -292,22 +318,4 @@ export default function Home() {
                     )}
                   </div>
 
-                  {project.progress >= 100 && (
-                    <div className="mt-3 bg-green-100 text-green-700 px-3 py-2 rounded-lg text-center font-bold text-sm">
-                      ✅ Bajarildi!
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        ) : (
-          <div className="text-center py-8 bg-gray-50 rounded-xl">
-            <div className="text-5xl mb-3">📁</div>
-            <p className="text-gray-500">Loyihalar yo'q</p>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
+                  {project.progre
