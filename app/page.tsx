@@ -33,7 +33,9 @@ export default function Home() {
             id,
             editing_status,
             content_type,
-            deadline
+            deadline,
+            created_at,
+            record_id
           )
         `)
 
@@ -57,10 +59,22 @@ export default function Home() {
       const totalVideos = projects?.reduce((sum, p) => sum + (p.videos?.length || 0), 0) || 0
 
       const projectsWithStatus = projects?.map(project => {
-        // FAQAT POST'larni hisoblash!
-        const completed = project.videos?.filter((v: any) => 
-          v.editing_status === 'completed' && v.content_type === 'post'
-        ).length || 0
+        // FAQAT SHU OYNING POST'LARINI HISOBLASH - FAQAT KIRITISHDAN!
+        const now = new Date()
+        const currentMonth = now.getMonth()
+        const currentYear = now.getFullYear()
+        
+        const thisMonthVideos = project.videos?.filter((v: any) => {
+          // FAQAT KIRITISHDAN YARATILGAN VA POST BO'LGAN VIDEOLAR!
+          if (v.editing_status !== 'completed') return false
+          if (v.content_type !== 'post') return false
+          if (!v.record_id) return false  // MUHIM! Faqat kiritishdan yaratilgan
+          
+          const videoDate = new Date(v.created_at)
+          return videoDate.getMonth() === currentMonth && videoDate.getFullYear() === currentYear
+        })
+        
+        const completed = thisMonthVideos?.length || 0
         const target = project.monthly_target || 12
         const progress = Math.round((completed / target) * 100)
         
@@ -229,7 +243,7 @@ export default function Home() {
       {/* Loyihalar Holati */}
       <div className="card-modern">
         <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-          📊 Loyihalar Holati
+          📊 Loyihalar Holati (Shu Oylik Progress)
         </h2>
         
         {projectsStatus.length > 0 ? (
@@ -269,7 +283,7 @@ export default function Home() {
 
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-600">
-                      📄 {project.completed}/{project.target} post
+                      📄 {project.completed}/{project.target} post (shu oy)
                     </span>
                     {deadlineInfo && (
                       <span className={`font-bold ${deadlineInfo.color}`}>
