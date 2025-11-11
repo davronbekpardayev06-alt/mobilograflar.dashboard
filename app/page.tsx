@@ -59,9 +59,12 @@ export default function Home() {
         .order('created_at', { ascending: false })
         .limit(5)
 
-      // FAQAT KIRITISHDAN (record_id bor) videolar hisoblash
+      // FAQAT KIRITILGAN VIDEOLAR - record_id bor (REJA emas!)
       const totalVideos = projects?.reduce((sum, p) => {
-        const kiritishVideos = p.videos?.filter((v: any) => v.record_id !== null) || []
+        const kiritishVideos = p.videos?.filter((v: any) => {
+          // Faqat record_id bor videolar (reja emas!)
+          return v.record_id !== null && v.record_id !== undefined
+        }) || []
         return sum + kiritishVideos.length
       }, 0) || 0
 
@@ -191,7 +194,7 @@ export default function Home() {
             <span className="text-lg opacity-90">Jami Videolar</span>
           </div>
           <div className="text-5xl font-bold">{stats.totalVideos}</div>
-          <div className="text-xs opacity-80 mt-2">Faqat kiritish</div>
+          <div className="text-xs opacity-80 mt-2">Faqat kiritilgan</div>
         </div>
 
         <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-2xl p-6 shadow-lg card-hover">
@@ -318,4 +321,87 @@ export default function Home() {
                     )}
                   </div>
 
-                  {project.progre
+                  {project.progress >= 100 && (
+                    <div className="mt-3 bg-green-100 text-green-700 px-3 py-2 rounded-lg text-center font-bold text-sm">
+                      ✅ Bajarildi!
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-8 bg-gray-50 rounded-xl">
+            <div className="text-5xl mb-3">📁</div>
+            <p className="text-gray-500 mb-4">Loyihalar yo'q</p>
+            <Link href="/loyihalar/yangi">
+              <button className="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white px-6 py-3 rounded-xl font-semibold transition">
+                ➕ Loyiha Yaratish
+              </button>
+            </Link>
+          </div>
+        )}
+      </div>
+
+      {/* Tezkor Havolalar */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Link href="/kiritish">
+          <div className="card-modern hover:shadow-xl transition-all transform hover:scale-105 cursor-pointer bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center text-3xl">
+                ➕
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-800">Ish Kiritish</h3>
+                <p className="text-sm text-gray-600">Yangi ish qo'shish</p>
+              </div>
+            </div>
+          </div>
+        </Link>
+
+        <Link href="/timeline">
+          <div className="card-modern hover:shadow-xl transition-all transform hover:scale-105 cursor-pointer bg-gradient-to-br from-blue-50 to-purple-50 border-2 border-blue-200">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center text-3xl">
+                📅
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-800">Timeline</h3>
+                <p className="text-sm text-gray-600">Haftalik reja</p>
+              </div>
+            </div>
+          </div>
+        </Link>
+
+        <Link href="/oylik">
+          <div className="card-modern hover:shadow-xl transition-all transform hover:scale-105 cursor-pointer bg-gradient-to-br from-orange-50 to-red-50 border-2 border-orange-200">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl flex items-center justify-center text-3xl">
+                📊
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-800">Oylik Hisobot</h3>
+                <p className="text-sm text-gray-600">Reyting va statistika</p>
+              </div>
+            </div>
+          </div>
+        </Link>
+      </div>
+
+      {/* Eslatma */}
+      <div className="card-modern bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200">
+        <div className="flex items-start gap-3">
+          <span className="text-3xl">ℹ️</span>
+          <div>
+            <h3 className="font-bold text-lg mb-2">Muhim eslatma:</h3>
+            <ul className="text-sm text-gray-700 space-y-1">
+              <li>✅ <strong>Jami Videolar:</strong> Faqat kiritilgan videolar (reja emas!)</li>
+              <li>✅ <strong>Progress:</strong> Faqat MONTAJ POST (Storis va Syomka emas)</li>
+              <li>✅ <strong>Oylik maqsad:</strong> Har bir loyihaning post montaj maqsadi</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
