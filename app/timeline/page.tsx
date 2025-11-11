@@ -82,6 +82,7 @@ export default function TimelinePage() {
         let storisCount = 0
         let syomkaCount = 0
         
+        // Records'dan hisoblash
         dayRecords.forEach(record => {
           const count = record.count || 1
           if (record.type === 'editing') {
@@ -234,7 +235,7 @@ export default function TimelinePage() {
             </div>
 
             {day.isPast || day.isToday ? (
-              // OXIRGI KUNLAR
+              // OXIRGI KUNLAR - Qilindi ma'lumoti bilan
               <div className="space-y-2">
                 {day.hasWork && (
                   <>
@@ -242,26 +243,34 @@ export default function TimelinePage() {
                       ✅ Qilindi
                     </div>
                     
-                    {day.postCount > 0 && (
-                      <div className="flex items-center gap-2 text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                        <span>📄</span>
-                        <span className="font-bold">{day.postCount}</span>
+                    {day.records.map((record: any, idx: number) => (
+                      <div key={idx} className="text-xs bg-green-100 text-green-700 px-2 py-2 rounded mb-1">
+                        <div className="font-bold">{record.projects?.name}</div>
+                        <div className="text-xs opacity-80">
+                          👤 {record.mobilographers?.name}
+                        </div>
+                        <div className="flex items-center gap-1 mt-1">
+                          {record.type === 'editing' && record.content_type === 'post' && (
+                            <span className="bg-green-200 text-green-800 px-2 py-0.5 rounded text-xs font-bold">
+                              📄 POST
+                            </span>
+                          )}
+                          {record.type === 'editing' && record.content_type === 'storis' && (
+                            <span className="bg-pink-200 text-pink-800 px-2 py-0.5 rounded text-xs font-bold">
+                              📱 STORIS
+                            </span>
+                          )}
+                          {record.type === 'filming' && (
+                            <span className="bg-blue-200 text-blue-800 px-2 py-0.5 rounded text-xs font-bold">
+                              📹 SYOMKA
+                            </span>
+                          )}
+                          {record.count > 1 && (
+                            <span className="font-bold ml-1">x{record.count}</span>
+                          )}
+                        </div>
                       </div>
-                    )}
-                    
-                    {day.storisCount > 0 && (
-                      <div className="flex items-center gap-2 text-xs bg-pink-100 text-pink-700 px-2 py-1 rounded">
-                        <span>📱</span>
-                        <span className="font-bold">{day.storisCount}</span>
-                      </div>
-                    )}
-                    
-                    {day.syomkaCount > 0 && (
-                      <div className="flex items-center gap-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                        <span>📹</span>
-                        <span className="font-bold">{day.syomkaCount}</span>
-                      </div>
-                    )}
+                    ))}
                   </>
                 )}
 
@@ -296,7 +305,7 @@ export default function TimelinePage() {
                 )}
               </div>
             ) : (
-              // KELGUSI KUNLAR
+              // KELGUSI KUNLAR - Rejalar
               <div className="space-y-2">
                 <div className="text-xs font-semibold text-green-600 mb-2">
                   🎯 Reja
@@ -354,7 +363,7 @@ export default function TimelinePage() {
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {day.deadlines.map((video: any, idx: number) => (
-                      <div key={idx} className="bg-orange-50 border border-orange-200 rounded-xl p-3 relative">
+                      <div key={idx} className="bg-orange-50 border border-orange-200 rounded-xl p-3 relative hover:shadow-md transition">
                         <button
                           onClick={() => handleDeleteReja(video.id)}
                           className="absolute top-2 right-2 text-red-600 hover:text-red-800 text-xl transition"
@@ -391,6 +400,54 @@ export default function TimelinePage() {
             <p>Keyingi 7 kunda reja yo'q</p>
           </div>
         )}
+      </div>
+
+      {/* Statistika */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="card-modern bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-4xl">✅</span>
+            <div>
+              <h3 className="font-bold text-lg">Qilingan Ishlar</h3>
+              <p className="text-sm text-gray-600">Oxirgi 7 kun</p>
+            </div>
+          </div>
+          <div className="text-4xl font-bold text-green-600">
+            {weekData.filter(d => d.isPast || d.isToday).reduce((sum, d) => 
+              sum + d.postCount + d.storisCount + d.syomkaCount, 0
+            )}
+          </div>
+        </div>
+
+        <div className="card-modern bg-gradient-to-br from-orange-50 to-red-50 border-2 border-orange-200">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-4xl">🎯</span>
+            <div>
+              <h3 className="font-bold text-lg">Kelgusi Rejalar</h3>
+              <p className="text-sm text-gray-600">Keyingi 7 kun</p>
+            </div>
+          </div>
+          <div className="text-4xl font-bold text-orange-600">
+            {weekData.filter(d => !d.isPast && !d.isToday).reduce((sum, d) => 
+              sum + d.deadlines.length, 0
+            )}
+          </div>
+        </div>
+
+        <div className="card-modern bg-gradient-to-br from-red-50 to-pink-50 border-2 border-red-200">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-4xl">⚠️</span>
+            <div>
+              <h3 className="font-bold text-lg">Qilinmagan</h3>
+              <p className="text-sm text-gray-600">O'tgan rejalar</p>
+            </div>
+          </div>
+          <div className="text-4xl font-bold text-red-600">
+            {weekData.filter(d => d.hasMissedDeadline).reduce((sum, d) => 
+              sum + d.deadlines.length, 0
+            )}
+          </div>
+        </div>
       </div>
 
       {/* REJA QO'SHISH MODAL */}
@@ -477,6 +534,9 @@ export default function TimelinePage() {
                     📹 Syomka
                   </button>
                 </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  ⚠️ Eslatma: Syomka progress'ga hisoblAnmaydi, faqat montaj post hisoblanadi
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -532,6 +592,22 @@ export default function TimelinePage() {
           </div>
         </div>
       )}
+
+      {/* Eslatma */}
+      <div className="card-modern bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200">
+        <div className="flex items-start gap-3">
+          <span className="text-3xl">ℹ️</span>
+          <div>
+            <h3 className="font-bold text-lg mb-2">Timeline haqida:</h3>
+            <ul className="text-sm text-gray-700 space-y-1">
+              <li>✅ <strong>Qilindi:</strong> Records'dan kiritilgan ishlar (kim, loyiha, ish turi ko'rsatiladi)</li>
+              <li>✅ <strong>Reja:</strong> Kelgusi kunlar uchun rejalashtirilgan ishlar</li>
+              <li>✅ <strong>Qilinmagan:</strong> Deadline o'tgan, bajarilmagan rejalar</li>
+              <li>⚠️ <strong>Progress:</strong> Faqat MONTAJ POST hisoblanadi (Syomka va Storis emas)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
