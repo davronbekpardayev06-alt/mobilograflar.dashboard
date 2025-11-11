@@ -13,31 +13,32 @@ export default function StatistikaPage() {
 
   const fetchData = async () => {
     try {
-      // Barcha mobilograflarni olish
       const { data: mobilographers } = await supabase
         .from('mobilographers')
         .select('*')
         .order('name')
 
-      // Barcha records'ni olish
       const { data: records } = await supabase
         .from('records')
         .select('*')
 
       const statsWithTotals = mobilographers?.map(m => {
-        // SHU MOBILOGRAFNING records'lari (KIM QILGANI!)
         const mobilographerRecords = records?.filter(r => 
           r.mobilographer_id === m.id
         ) || []
         
-        // Count'ni hisobga olish
-        let montajCount = 0
+        let postCount = 0
+        let storisCount = 0
         let syomkaCount = 0
         
         mobilographerRecords.forEach(record => {
           const count = record.count || 1
           if (record.type === 'editing') {
-            montajCount += count
+            if (record.content_type === 'post') {
+              postCount += count
+            } else if (record.content_type === 'storis') {
+              storisCount += count
+            }
           } else if (record.type === 'filming') {
             syomkaCount += count
           }
@@ -45,9 +46,11 @@ export default function StatistikaPage() {
         
         return {
           ...m,
-          montajCount,
+          postCount,
+          storisCount,
+          montajCount: postCount + storisCount,
           syomkaCount,
-          totalPoints: montajCount + syomkaCount
+          totalPoints: postCount + storisCount + syomkaCount
         }
       })
 
@@ -70,7 +73,8 @@ export default function StatistikaPage() {
     )
   }
 
-  const totalMontaj = stats.reduce((sum, s) => sum + s.montajCount, 0)
+  const totalPost = stats.reduce((sum, s) => sum + s.postCount, 0)
+  const totalStoris = stats.reduce((sum, s) => sum + s.storisCount, 0)
   const totalSyomka = stats.reduce((sum, s) => sum + s.syomkaCount, 0)
 
   return (
@@ -80,14 +84,23 @@ export default function StatistikaPage() {
       </h1>
 
       {/* Umumiy statistika */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-2xl p-6 shadow-lg card-hover">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl p-6 shadow-lg card-hover">
           <div className="flex items-center gap-3 mb-3">
-            <span className="text-4xl">🎬</span>
-            <span className="text-lg opacity-90">Jami Montaj</span>
+            <span className="text-4xl">📄</span>
+            <span className="text-lg opacity-90">Jami Post</span>
           </div>
-          <div className="text-5xl font-bold">{totalMontaj}</div>
-          <p className="text-sm opacity-90 mt-2">Tugallangan videolar</p>
+          <div className="text-5xl font-bold">{totalPost}</div>
+          <p className="text-sm opacity-90 mt-2">Loyihalarga hisoblanadi</p>
+        </div>
+
+        <div className="bg-gradient-to-br from-pink-500 to-pink-600 text-white rounded-2xl p-6 shadow-lg card-hover">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-4xl">📱</span>
+            <span className="text-lg opacity-90">Jami Storis</span>
+          </div>
+          <div className="text-5xl font-bold">{totalStoris}</div>
+          <p className="text-sm opacity-90 mt-2">Faqat statistikada</p>
         </div>
 
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl p-6 shadow-lg card-hover">
@@ -99,12 +112,12 @@ export default function StatistikaPage() {
           <p className="text-sm opacity-90 mt-2">Suratga olingan</p>
         </div>
 
-        <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl p-6 shadow-lg card-hover">
+        <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-2xl p-6 shadow-lg card-hover">
           <div className="flex items-center gap-3 mb-3">
             <span className="text-4xl">📊</span>
             <span className="text-lg opacity-90">Jami Ish</span>
           </div>
-          <div className="text-5xl font-bold">{totalMontaj + totalSyomka}</div>
+          <div className="text-5xl font-bold">{totalPost + totalStoris + totalSyomka}</div>
           <p className="text-sm opacity-90 mt-2">Barcha ishlar</p>
         </div>
       </div>
@@ -128,14 +141,24 @@ export default function StatistikaPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-purple-100 rounded-lg p-3">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-green-100 rounded-lg p-3">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-2xl">🎬</span>
-                    <span className="text-sm text-gray-600">Montaj</span>
+                    <span className="text-2xl">📄</span>
+                    <span className="text-sm text-gray-600">Post</span>
                   </div>
-                  <div className="text-3xl font-bold text-purple-600">
-                    {mobilographer.montajCount}
+                  <div className="text-3xl font-bold text-green-600">
+                    {mobilographer.postCount}
+                  </div>
+                </div>
+
+                <div className="bg-pink-100 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-2xl">📱</span>
+                    <span className="text-sm text-gray-600">Storis</span>
+                  </div>
+                  <div className="text-3xl font-bold text-pink-600">
+                    {mobilographer.storisCount}
                   </div>
                 </div>
 
