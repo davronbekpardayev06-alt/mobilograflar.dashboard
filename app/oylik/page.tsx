@@ -4,107 +4,128 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
 export default function OylikPage() {
-  const [monthlyData, setMonthlyData] = useState<any>({
-    totalMontaj: 0,
-    totalSyomka: 0,
-    totalWork: 0,
-    mobilographers: [],
-    projects: [],
-    monthName: ''
-  })
+  const [stats, setStats] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedMonth, setSelectedMonth] = useState(new Date())
 
   useEffect(() => {
     fetchData()
-  }, [])
+  }, [selectedMonth])
 
   const fetchData = async () => {
     try {
-      const today = new Date()
-      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
-      
-      const startDate = monthStart.toISOString().split('T')[0]
-      const endDate = today.toISOString().split('T')[0]
+      const month = selectedMonth.getMonth()
+      const year = selectedMonth.getFullYear()
 
-      // Oylik records
-      const { data: records } = await supabase
-        .from('records')
-        .select('*, mobilographers(id, name), projects(id, name)')
-        .gte('date', startDate)
-        .lte('date', endDate)
+      const { data: mobilographers } = await supabase
+        .from('mobilographers')
+        .select('*')
+        .order('name')
 
-      // Loyihalar
       const { data: projects } = await supabase
         .from('projects')
         .select(`
           *,
-          mobilographers(name),
-          videos(id, editing_status)
+          videos(id, editing_status, filming_status, content_type, task_type, created_at, record_id)
         `)
 
-      // Count'larni hisobga olish
-      let totalMontaj = 0
-      let totalSyomka = 0
-      const mobilographersMap = new Map()
+      const { data: records } = await supabase
+        .from('records')
+        .select('*')
+        .gte('date', `${year}-${String(month + 1).padStart(2, '0')}-01`)
+        .lte('date', `${year}-${String(month + 1).padStart(2, '0')}-31`)
 
-      records?.forEach(record => {
-        const count = record.count || 1
+      const mobilographersWithStats = mobilographers?.map(mob => {
+        const mobProjects = projects?.filter(p => p.mobilographer_id === mob.id) || []
         
-        if (record.type === 'editing') {
-          totalMontaj += count
-        } else if (record.type === 'filming') {
-          totalSyomka += count
-        }
+        // FAQAT MONTAJ POST hisoblash - KIRITISHDAN
+        let totalCompleted = 0
+        let totalTarget = 0
 
-        const mobId = record.mobilographers?.id
-        if (!mobId) return
-
-        if (!mobilographersMap.has(mobId)) {
-          mobilographersMap.set(mobId, {
-            id: mobId,
-            name: record.mobilographers.name,
-            montaj: 0,
-            syomka: 0,
-            total: 0
+        mobProjects.forEach(project => {
+          const monthVideos = project.videos?.filter((v: any) => {
+            // FAQAT MONTAJ TASK_TYPE!
+            if (v.task_type !== 'montaj') return false
+            
+            // FAQAT POST CONTENT_TYPE!
+            if (v.content_type !== 'post') return false
+            
+            // FAQAT COMPLETED EDITING_STATUS!
+            if (v.editing_status !== 'completed') return false
+            
+            // FAQAT KIRITISHDAN (record_id bor)!
+            if (!v.record_id) return false
+            
+            const videoDate = new Date(v.created_at)
+            return videoDate.getMonth() === month && videoDate.getFullYear() === year
           })
-        }
 
-        const mob = mobilographersMap.get(mobId)
-        if (record.type === 'editing') mob.montaj += count
-        if (record.type === 'filming') mob.syomka += count
-        mob.total += count
-      })
+          totalCompleted += monthVideos?.length || 0
+          totalTarget += project.monthly_target || 12
+        })
 
-      // Loyihalar progress
-      const projectsWithProgress = projects?.map(project => {
-        const completed = project.videos?.filter((v: any) => 
-          v.editing_status === 'completed'
-        ).length || 0
-        const target = project.monthly_target || 12
-        const progress = Math.round((completed / target) * 100)
+        // Records statistikasi
+        const mobRecords = records?.filter(r => r.mobilographer_id === mob.id) || []
+        
+        const postCount = mobRecords
+          .filter(r => r.type === 'editing' && r.content_type === 'post')
+          .reduce((sum, r) => sum + (r.count || 1), 0)
+        
+        const storisCount = mobRecords
+          .filter(r => r.type === 'editing' && r.content_type === 'storis')
+          .reduce((sum, r) => sum + (r.count || 1), 0)
+        
+        const syomkaCount = mobRecords
+          .filter(r => r.type === 'filming')
+          .reduce((sum, r) => sum + (r.count || 1), 0)
+
+        const totalPoints = postCount + storisCount + syomkaCount
+        const progress = totalTarget > 0 ? Math.round((totalCompleted / totalTarget) * 100) : 0
 
         return {
-          ...project,
-          completed,
-          target,
-          progress
+          id: mob.id,
+          name: mob.name,
+          postCount,
+          storisCount,
+          syomkaCount,
+          totalPoints,
+          totalCompleted,
+          totalTarget,
+          progress,
+          projectsCount: mobProjects.length
         }
-      }).sort((a, b) => b.progress - a.progress)
+      }).sort((a, b) => b.totalPoints - a.totalPoints)
 
-      setMonthlyData({
-        totalMontaj,
-        totalSyomka,
-        totalWork: totalMontaj + totalSyomka,
-        mobilographers: Array.from(mobilographersMap.values()).sort((a, b) => b.total - a.total),
-        projects: projectsWithProgress || [],
-        monthName: today.toLocaleDateString('uz-UZ', { month: 'long', year: 'numeric' })
-      })
-
+      setStats(mobilographersWithStats || [])
       setLoading(false)
     } catch (error) {
       console.error('Error:', error)
       setLoading(false)
     }
+  }
+
+  const changeMonth = (direction: number) => {
+    const newDate = new Date(selectedMonth)
+    newDate.setMonth(newDate.getMonth() + direction)
+    setSelectedMonth(newDate)
+  }
+
+  const getMonthName = () => {
+    return selectedMonth.toLocaleDateString('uz-UZ', { month: 'long', year: 'numeric' })
+  }
+
+  const getRankEmoji = (index: number) => {
+    if (index === 0) return '🥇'
+    if (index === 1) return '🥈'
+    if (index === 2) return '🥉'
+    return `${index + 1}`
+  }
+
+  const getRankColor = (index: number) => {
+    if (index === 0) return 'from-yellow-400 to-yellow-600'
+    if (index === 1) return 'from-gray-400 to-gray-600'
+    if (index === 2) return 'from-orange-400 to-orange-600'
+    return 'from-blue-400 to-blue-600'
   }
 
   if (loading) {
@@ -118,132 +139,191 @@ export default function OylikPage() {
     )
   }
 
+  const totalStats = {
+    post: stats.reduce((sum, s) => sum + s.postCount, 0),
+    storis: stats.reduce((sum, s) => sum + s.storisCount, 0),
+    syomka: stats.reduce((sum, s) => sum + s.syomkaCount, 0),
+    totalPoints: stats.reduce((sum, s) => sum + s.totalPoints, 0),
+    totalCompleted: stats.reduce((sum, s) => sum + s.totalCompleted, 0),
+    totalTarget: stats.reduce((sum, s) => sum + s.totalTarget, 0)
+  }
+
   return (
     <div className="space-y-6 animate-slide-in">
-      <div>
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
-          📈 Oylik Hisobot
+          📊 Oylik Hisobot
         </h1>
-        <p className="text-gray-600 mt-2">{monthlyData.monthName}</p>
       </div>
 
-      {/* Umumiy statistika */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-gradient-to-br from-orange-500 to-red-600 text-white rounded-2xl p-6 shadow-lg card-hover">
-          <div className="flex items-center gap-3 mb-3">
-            <span className="text-4xl">📊</span>
-            <span className="text-lg opacity-90">Jami Ish</span>
+      {/* Month Selector */}
+      <div className="card-modern">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => changeMonth(-1)}
+            className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-xl font-bold transition transform hover:scale-105"
+          >
+            ← Oldingi oy
+          </button>
+          
+          <div className="text-center">
+            <h2 className="text-3xl font-bold text-gray-800">{getMonthName()}</h2>
+            <p className="text-sm text-gray-500 mt-1">Progress: Faqat MONTAJ POST</p>
           </div>
-          <div className="text-5xl font-bold">{monthlyData.totalWork}</div>
-          <p className="text-sm opacity-90 mt-2">Bu oyda</p>
+          
+          <button
+            onClick={() => changeMonth(1)}
+            className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-xl font-bold transition transform hover:scale-105"
+          >
+            Keyingi oy →
+          </button>
+        </div>
+      </div>
+
+      {/* Umumiy Statistika */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl p-6 shadow-lg">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-4xl">📄</span>
+            <span className="text-lg opacity-90">Post Montaj</span>
+          </div>
+          <div className="text-5xl font-bold">{totalStats.post}</div>
         </div>
 
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-2xl p-6 shadow-lg card-hover">
+        <div className="bg-gradient-to-br from-pink-500 to-pink-600 text-white rounded-2xl p-6 shadow-lg">
           <div className="flex items-center gap-3 mb-3">
-            <span className="text-4xl">🎬</span>
-            <span className="text-lg opacity-90">Montaj</span>
+            <span className="text-4xl">📱</span>
+            <span className="text-lg opacity-90">Storis Montaj</span>
           </div>
-          <div className="text-5xl font-bold">{monthlyData.totalMontaj}</div>
-          <p className="text-sm opacity-90 mt-2">Tugallangan</p>
+          <div className="text-5xl font-bold">{totalStats.storis}</div>
         </div>
 
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl p-6 shadow-lg card-hover">
+        <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl p-6 shadow-lg">
           <div className="flex items-center gap-3 mb-3">
             <span className="text-4xl">📹</span>
             <span className="text-lg opacity-90">Syomka</span>
           </div>
-          <div className="text-5xl font-bold">{monthlyData.totalSyomka}</div>
-          <p className="text-sm opacity-90 mt-2">Suratga olingan</p>
-        </div>
-      </div>
-
-      {/* Loyihalar progress */}
-      <div className="card-modern">
-        <h2 className="text-2xl font-bold mb-6">📁 Loyihalar Progress</h2>
-        
-        <div className="space-y-4">
-          {monthlyData.projects.map((project: any) => (
-            <div key={project.id} className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h3 className="text-lg font-bold">{project.name}</h3>
-                  <p className="text-sm text-gray-600">👤 {project.mobilographers?.name}</p>
-                </div>
-                <div className="text-right">
-                  <div className={`text-2xl font-bold ${
-                    project.progress >= 100 ? 'text-green-600' :
-                    project.progress >= 75 ? 'text-yellow-600' :
-                    'text-blue-600'
-                  }`}>
-                    {project.progress}%
-                  </div>
-                  <p className="text-xs text-gray-500">{project.completed}/{project.target}</p>
-                </div>
-              </div>
-              
-              <div className="w-full bg-gray-200 rounded-full h-3">
-                <div
-                  className={`progress-bar h-3 rounded-full ${
-                    project.progress >= 100 ? 'bg-green-500' :
-                    project.progress >= 75 ? 'bg-yellow-500' :
-                    'bg-blue-500'
-                  }`}
-                  style={{ width: `${Math.min(project.progress, 100)}%` }}
-                />
-              </div>
-            </div>
-          ))}
+          <div className="text-5xl font-bold">{totalStats.syomka}</div>
         </div>
 
-        {monthlyData.projects.length === 0 && (
-          <div className="text-center py-8">
-            <div className="text-5xl mb-3">📁</div>
-            <p className="text-gray-500">Loyihalar yo'q</p>
+        <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-2xl p-6 shadow-lg">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-4xl">⭐</span>
+            <span className="text-lg opacity-90">Jami Ball</span>
           </div>
-        )}
+          <div className="text-5xl font-bold">{totalStats.totalPoints}</div>
+        </div>
       </div>
 
-      {/* Oylik reyting */}
+      {/* Progress Umumiy */}
       <div className="card-modern">
-        <h2 className="text-2xl font-bold mb-6">🏆 Oylik Reyting</h2>
-        
-        <div className="space-y-4">
-          {monthlyData.mobilographers.map((mob: any, index: number) => (
-            <div key={mob.id} className="bg-gradient-to-r from-orange-50 to-red-50 rounded-xl p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-600 rounded-full flex items-center justify-center text-white text-xl font-bold">
-                    {index + 1}
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold">{mob.name}</h3>
-                    <div className="flex items-center gap-3 text-sm mt-1">
-                      <span className="flex items-center gap-1">
-                        <span>🎬</span>
-                        <span className="font-semibold">{mob.montaj}</span>
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <span>📹</span>
-                        <span className="font-semibold">{mob.syomka}</span>
-                      </span>
+        <h3 className="text-xl font-bold mb-4">📊 Umumiy Progress (Faqat MONTAJ POST)</h3>
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-lg text-gray-700">
+            📄 {totalStats.totalCompleted}/{totalStats.totalTarget} post montaj
+          </span>
+          <span className="text-3xl font-bold text-blue-600">
+            {totalStats.totalTarget > 0 ? Math.round((totalStats.totalCompleted / totalStats.totalTarget) * 100) : 0}%
+          </span>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-6">
+          <div
+            className="progress-bar h-6 rounded-full bg-gradient-to-r from-blue-500 to-purple-600"
+            style={{ 
+              width: `${Math.min(totalStats.totalTarget > 0 ? (totalStats.totalCompleted / totalStats.totalTarget) * 100 : 0, 100)}%` 
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Mobilograflar Reytingi */}
+      <div className="card-modern">
+        <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+          🏆 Mobilograflar Reytingi
+        </h2>
+
+        {stats.length > 0 ? (
+          <div className="space-y-4">
+            {stats.map((mob, index) => (
+              <div
+                key={mob.id}
+                className={`p-6 rounded-2xl bg-gradient-to-r ${getRankColor(index)} text-white shadow-lg`}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center text-3xl font-bold">
+                      {getRankEmoji(index)}
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-bold">{mob.name}</h3>
+                      <p className="text-sm opacity-90">{mob.projectsCount} ta loyiha</p>
                     </div>
                   </div>
+                  <div className="text-right">
+                    <div className="text-5xl font-bold">{mob.totalPoints}</div>
+                    <div className="text-sm opacity-90">jami ball</div>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-3xl font-bold text-orange-600">{mob.total}</div>
-                  <div className="text-xs text-gray-500">jami</div>
+
+                <div className="grid grid-cols-3 gap-4 mb-4">
+                  <div className="bg-white bg-opacity-20 rounded-xl p-3 text-center">
+                    <div className="text-3xl font-bold">{mob.postCount}</div>
+                    <div className="text-xs opacity-90">📄 Post</div>
+                  </div>
+                  <div className="bg-white bg-opacity-20 rounded-xl p-3 text-center">
+                    <div className="text-3xl font-bold">{mob.storisCount}</div>
+                    <div className="text-xs opacity-90">📱 Storis</div>
+                  </div>
+                  <div className="bg-white bg-opacity-20 rounded-xl p-3 text-center">
+                    <div className="text-3xl font-bold">{mob.syomkaCount}</div>
+                    <div className="text-xs opacity-90">📹 Syomka</div>
+                  </div>
+                </div>
+
+                {/* Progress - Faqat MONTAJ POST */}
+                <div className="bg-white bg-opacity-20 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold">
+                      📊 Progress (Faqat MONTAJ POST)
+                    </span>
+                    <span className="text-2xl font-bold">{mob.progress}%</span>
+                  </div>
+                  <div className="w-full bg-white bg-opacity-30 rounded-full h-3 mb-2">
+                    <div
+                      className="h-3 rounded-full bg-white"
+                      style={{ width: `${Math.min(mob.progress, 100)}%` }}
+                    />
+                  </div>
+                  <div className="text-xs opacity-90">
+                    {mob.totalCompleted}/{mob.totalTarget} post montaj
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-
-        {monthlyData.mobilographers.length === 0 && (
-          <div className="text-center py-8">
-            <div className="text-5xl mb-3">📊</div>
-            <p className="text-gray-500">Bu oyda faoliyat yo'q</p>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12 bg-gray-50 rounded-xl">
+            <div className="text-6xl mb-4">📊</div>
+            <p className="text-gray-500 text-lg">Bu oyda hozircha ma'lumot yo'q</p>
           </div>
         )}
+      </div>
+
+      {/* Eslatma */}
+      <div className="card-modern bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200">
+        <div className="flex items-start gap-3">
+          <span className="text-3xl">ℹ️</span>
+          <div>
+            <h3 className="font-bold text-lg mb-2">Eslatma:</h3>
+            <ul className="text-sm text-gray-700 space-y-1">
+              <li>✅ <strong>Ball hisob:</strong> Post montaj + Storis montaj + Syomka</li>
+              <li>✅ <strong>Progress:</strong> Faqat MONTAJ POST (Storis va Syomka hisoblanmaydi)</li>
+              <li>✅ <strong>Reyting:</strong> Jami ball bo'yicha</li>
+              <li>✅ <strong>Faqat kiritish:</strong> REJA progress'ga kirmaydi</li>
+            </ul>
+          </div>
+        </div>
       </div>
     </div>
   )
