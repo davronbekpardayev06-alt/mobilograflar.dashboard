@@ -8,9 +8,13 @@ export default function TimelinePage() {
   const [loading, setLoading] = useState(true)
   const [showRejaModal, setShowRejaModal] = useState(false)
   const [projects, setProjects] = useState<any[]>([])
+  const [mobilographers, setMobilographers] = useState<any[]>([])
   const [newReja, setNewReja] = useState({
     project_id: '',
-    deadline: '',
+    mobilographer_id: '',
+    deadline_date: '',
+    deadline_time: '',
+    task_type: 'montaj',
     name: ''
   })
 
@@ -26,6 +30,13 @@ export default function TimelinePage() {
       const futureWeek = new Date(today)
       futureWeek.setDate(today.getDate() + 6)
 
+      // Mobilograflarni olish
+      const { data: mobilographersData } = await supabase
+        .from('mobilographers')
+        .select('*')
+        .order('name')
+
+      // Records olish
       const { data: records } = await supabase
         .from('records')
         .select(`
@@ -36,23 +47,28 @@ export default function TimelinePage() {
         .gte('date', pastWeek.toISOString().split('T')[0])
         .lte('date', today.toISOString().split('T')[0])
 
+      // Videos (rejalar) olish
       const { data: allVideos } = await supabase
         .from('videos')
         .select(`
           *,
-          projects(name, mobilographers(name))
+          projects(name, mobilographers(name)),
+          assigned_mobilographer:mobilographers!assigned_mobilographer_id(name)
         `)
         .gte('deadline', pastWeek.toISOString().split('T')[0])
         .lte('deadline', futureWeek.toISOString().split('T')[0])
         .neq('editing_status', 'completed')
 
+      // Loyihalarni olish
       const { data: projectsData } = await supabase
         .from('projects')
         .select('*, mobilographers(name)')
         .order('name')
 
       setProjects(projectsData || [])
+      setMobilographers(mobilographersData || [])
 
+      // 7 kunlik calendar yaratish
       const days = []
       for (let i = -6; i <= 6; i++) {
         const date = new Date(today)
@@ -107,7 +123,7 @@ export default function TimelinePage() {
   const handleAddReja = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!newReja.project_id || !newReja.deadline || !newReja.name) {
+    if (!newReja.project_id || !newReja.mobilographer_id || !newReja.deadline_date || !newReja.deadline_time || !newReja.name) {
       alert('Barcha maydonlarni to\'ldiring!')
       return
     }
@@ -117,10 +133,13 @@ export default function TimelinePage() {
         .from('videos')
         .insert([{
           project_id: newReja.project_id,
+          assigned_mobilographer_id: newReja.mobilographer_id,
           name: newReja.name,
-          deadline: newReja.deadline,
-          filming_status: 'pending',
-          editing_status: 'pending',
+          deadline: newReja.deadline_date,
+          deadline_time: newReja.deadline_time,
+          task_type: newReja.task_type,
+          filming_status: newReja.task_type === 'syomka' ? 'pending' : 'completed',
+          editing_status: newReja.task_type === 'montaj' ? 'pending' : 'completed',
           content_type: 'post'
         }])
 
@@ -128,7 +147,14 @@ export default function TimelinePage() {
 
       alert('✅ Reja qo\'shildi!')
       setShowRejaModal(false)
-      setNewReja({ project_id: '', deadline: '', name: '' })
+      setNewReja({ 
+        project_id: '', 
+        mobilographer_id: '',
+        deadline_date: '', 
+        deadline_time: '',
+        task_type: 'montaj',
+        name: '' 
+      })
       fetchData()
     } catch (error) {
       console.error('Error:', error)
@@ -191,7 +217,6 @@ export default function TimelinePage() {
             {day.isPast || day.isToday ? (
               // OXIRGI KUNLAR
               <div className="space-y-2">
-                {/* ISH QILINDI */}
                 {day.hasWork && (
                   <>
                     <div className="text-xs font-semibold text-green-600 mb-2">
@@ -221,7 +246,6 @@ export default function TimelinePage() {
                   </>
                 )}
 
-                {/* DEADLINE O'TGAN LEKIN ISH QILINMAGAN */}
                 {day.hasMissedDeadline && (
                   <>
                     <div className="text-xs font-semibold text-red-600 mb-2">
@@ -231,14 +255,21 @@ export default function TimelinePage() {
                       <div key={idx} className="text-xs bg-red-100 text-red-700 px-2 py-2 rounded">
                         <div className="font-bold">{video.projects?.name}</div>
                         <div className="text-xs opacity-80">
-                          Deadline o'tdi
+                          👤 {video.assigned_mobilographer?.name || 'Noma\'lum'}
                         </div>
+                        <div className="text-xs opacity-80">
+                          {video.task_type === 'syomka' ? '📹 Syomka' : '🎬 Montaj'}
+                        </div>
+                        {video.deadline_time && (
+                          <div className="text-xs opacity-80">
+                            ⏰ {video.deadline_time}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </>
                 )}
 
-                {/* HECH NARSA YO'Q */}
                 {!day.hasWork && !day.hasMissedDeadline && (
                   <div className="text-xs text-gray-400 text-center py-2">
                     {day.isToday ? 'Hozircha yo\'q' : '—'}
@@ -257,8 +288,16 @@ export default function TimelinePage() {
                     <div key={idx} className="text-xs bg-orange-100 text-orange-700 px-2 py-2 rounded">
                       <div className="font-bold">{video.projects?.name}</div>
                       <div className="text-xs opacity-80">
-                        ⏰ Deadline
+                        👤 {video.assigned_mobilographer?.name || 'Noma\'lum'}
                       </div>
+                      <div className="text-xs opacity-80">
+                        {video.task_type === 'syomka' ? '📹 Syomka' : '🎬 Montaj'}
+                      </div>
+                      {video.deadline_time && (
+                        <div className="text-xs opacity-80">
+                          ⏰ {video.deadline_time}
+                        </div>
+                      )}
                     </div>
                   ))
                 ) : (
@@ -292,13 +331,20 @@ export default function TimelinePage() {
                       <div key={idx} className="bg-orange-50 border border-orange-200 rounded-xl p-3">
                         <div className="flex items-center justify-between mb-2">
                           <span className="font-bold">{video.projects?.name}</span>
-                          <span className="text-sm text-orange-600">⏰ Deadline</span>
+                          <span className="text-sm text-orange-600">
+                            {video.task_type === 'syomka' ? '📹 Syomka' : '🎬 Montaj'}
+                          </span>
                         </div>
-                        <div className="text-sm text-gray-600">
-                          👤 {video.projects?.mobilographers?.name}
+                        <div className="text-sm text-gray-600 mb-1">
+                          👤 {video.assigned_mobilographer?.name || 'Noma\'lum'}
                         </div>
+                        {video.deadline_time && (
+                          <div className="text-sm text-gray-600 mb-1">
+                            ⏰ {video.deadline_time}
+                          </div>
+                        )}
                         <div className="text-xs text-gray-500 mt-1">
-                          {video.name}
+                          📝 {video.name}
                         </div>
                       </div>
                     ))}
@@ -309,7 +355,7 @@ export default function TimelinePage() {
         ) : (
           <div className="text-center py-8 text-gray-500">
             <div className="text-5xl mb-3">📅</div>
-            <p>Keyingi 7 kunda deadline yo'q</p>
+            <p>Keyingi 7 kunda reja yo'q</p>
           </div>
         )}
       </div>
@@ -317,7 +363,7 @@ export default function TimelinePage() {
       {/* REJA QO'SHISH MODAL */}
       {showRejaModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-8">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-8 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold">➕ Yangi Reja Qo'shish</h2>
               <button
@@ -331,7 +377,7 @@ export default function TimelinePage() {
             <form onSubmit={handleAddReja} className="space-y-6">
               <div>
                 <label className="block text-sm font-semibold mb-2 text-gray-700">
-                  📁 Loyiha
+                  📁 Loyiha *
                 </label>
                 <select
                   value={newReja.project_id}
@@ -350,21 +396,88 @@ export default function TimelinePage() {
 
               <div>
                 <label className="block text-sm font-semibold mb-2 text-gray-700">
-                  ⏰ Deadline (Tugash sanasi)
+                  👤 Kim qiladi? (Mobilograf) *
                 </label>
-                <input
-                  type="date"
-                  value={newReja.deadline}
-                  onChange={(e) => setNewReja({ ...newReja, deadline: e.target.value })}
-                  min={new Date().toISOString().split('T')[0]}
+                <select
+                  value={newReja.mobilographer_id}
+                  onChange={(e) => setNewReja({ ...newReja, mobilographer_id: e.target.value })}
                   className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all outline-none text-lg"
                   required
-                />
+                >
+                  <option value="">Tanlang...</option>
+                  {mobilographers.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-2">
+                  Bu ishni kim bajarishi kerakligini tanlang
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold mb-3 text-gray-700">
+                  🎬 Ish turi *
+                </label>
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    type="button"
+                    onClick={() => setNewReja({ ...newReja, task_type: 'montaj' })}
+                    className={`py-4 rounded-xl font-bold text-lg transition-all ${
+                      newReja.task_type === 'montaj'
+                        ? 'bg-gradient-to-br from-purple-500 to-purple-600 text-white shadow-lg'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    🎬 Montaj
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewReja({ ...newReja, task_type: 'syomka' })}
+                    className={`py-4 rounded-xl font-bold text-lg transition-all ${
+                      newReja.task_type === 'syomka'
+                        ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    📹 Syomka
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold mb-2 text-gray-700">
+                    📅 Sana *
+                  </label>
+                  <input
+                    type="date"
+                    value={newReja.deadline_date}
+                    onChange={(e) => setNewReja({ ...newReja, deadline_date: e.target.value })}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all outline-none text-lg"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold mb-2 text-gray-700">
+                    ⏰ Vaqt *
+                  </label>
+                  <input
+                    type="time"
+                    value={newReja.deadline_time}
+                    onChange={(e) => setNewReja({ ...newReja, deadline_time: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all outline-none text-lg"
+                    required
+                  />
+                </div>
               </div>
 
               <div>
                 <label className="block text-sm font-semibold mb-2 text-gray-700">
-                  📝 Reja nomi
+                  📝 Reja nomi *
                 </label>
                 <input
                   type="text"
