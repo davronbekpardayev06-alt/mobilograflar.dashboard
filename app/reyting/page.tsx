@@ -13,41 +13,45 @@ export default function ReytingPage() {
 
   const fetchData = async () => {
     try {
-      // Barcha mobilograflarni olish
       const { data: mobilographers } = await supabase
         .from('mobilographers')
         .select('*')
 
-      // Barcha records'ni olish
       const { data: records } = await supabase
         .from('records')
         .select('*')
 
-      // Har bir mobilograf uchun hisoblar
       const rankingsWithScores = mobilographers?.map(m => {
-        // Shu mobilografning barcha records'lari
         const mobilographerRecords = records?.filter(r => 
           r.mobilographer_id === m.id
         ) || []
         
-        // Count'ni hisobga olish
-        const montajCount = mobilographerRecords
-          .filter(r => r.type === 'editing')
-          .reduce((sum, r) => sum + (r.count || 1), 0)
+        let postCount = 0
+        let storisCount = 0
+        let syomkaCount = 0
         
-        const syomkaCount = mobilographerRecords
-          .filter(r => r.type === 'filming')
-          .reduce((sum, r) => sum + (r.count || 1), 0)
+        mobilographerRecords.forEach(record => {
+          const count = record.count || 1
+          if (record.type === 'editing') {
+            if (record.content_type === 'post') {
+              postCount += count
+            } else if (record.content_type === 'storis') {
+              storisCount += count
+            }
+          } else if (record.type === 'filming') {
+            syomkaCount += count
+          }
+        })
         
         return {
           ...m,
-          montajCount,
+          postCount,
+          storisCount,
           syomkaCount,
-          totalPoints: montajCount + syomkaCount
+          totalPoints: postCount + storisCount + syomkaCount
         }
       }).sort((a, b) => b.totalPoints - a.totalPoints) || []
 
-      console.log('Rankings:', rankingsWithScores) // Debug uchun
       setRankings(rankingsWithScores)
       setLoading(false)
     } catch (error) {
@@ -108,12 +112,17 @@ export default function ReytingPage() {
 
               {/* Mobilograf info */}
               <div className="flex-1">
-                <h3 className="text-2xl font-bold mb-1">{mobilographer.name}</h3>
-                <div className="flex items-center gap-4 text-sm">
+                <h3 className="text-2xl font-bold mb-2">{mobilographer.name}</h3>
+                <div className="flex items-center gap-4 text-sm flex-wrap">
                   <span className="flex items-center gap-1">
-                    <span className="text-lg">🎬</span>
-                    <span className="font-semibold">Montaj:</span>
-                    <span className="text-purple-600 font-bold">{mobilographer.montajCount}</span>
+                    <span className="text-lg">📄</span>
+                    <span className="font-semibold">Post:</span>
+                    <span className="text-green-600 font-bold">{mobilographer.postCount}</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="text-lg">📱</span>
+                    <span className="font-semibold">Storis:</span>
+                    <span className="text-pink-600 font-bold">{mobilographer.storisCount}</span>
                   </span>
                   <span className="flex items-center gap-1">
                     <span className="text-lg">📹</span>
