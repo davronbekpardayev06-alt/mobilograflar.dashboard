@@ -30,7 +30,7 @@ export default function YangiLoyihaPage() {
       setMobilographers(data || [])
       setLoading(false)
     } catch (error) {
-      console.error('Error:', error)
+      console.error('Error fetching mobilographers:', error)
       setLoading(false)
     }
   }
@@ -46,22 +46,35 @@ export default function YangiLoyihaPage() {
     setSubmitting(true)
 
     try {
-      const { error } = await supabase
+      console.log('Creating project with data:', {
+        name: newProject.name,
+        mobilographer_id: newProject.mobilographer_id,
+        monthly_target: newProject.monthly_target,
+        description: newProject.description || null
+      })
+
+      const { data, error } = await supabase
         .from('projects')
         .insert([{
           name: newProject.name,
           mobilographer_id: newProject.mobilographer_id,
-          monthly_target: newProject.monthly_target,
+          monthly_target: parseInt(newProject.monthly_target.toString()) || 12,
           description: newProject.description || null
         }])
+        .select()
 
-      if (error) throw error
+      console.log('Insert response:', { data, error })
+
+      if (error) {
+        console.error('Supabase error:', error)
+        throw error
+      }
 
       alert('✅ Loyiha yaratildi!')
       router.push('/loyihalar')
-    } catch (error) {
-      console.error('Error:', error)
-      alert('❌ Xatolik yuz berdi!')
+    } catch (error: any) {
+      console.error('Error creating project:', error)
+      alert('❌ Xatolik: ' + (error?.message || 'Noma\'lum xatolik'))
       setSubmitting(false)
     }
   }
@@ -96,7 +109,7 @@ export default function YangiLoyihaPage() {
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label className="block text-sm font-semibold mb-2 text-gray-700">
-                📁 Loyiha nomi
+                📁 Loyiha nomi *
               </label>
               <input
                 type="text"
@@ -110,7 +123,7 @@ export default function YangiLoyihaPage() {
 
             <div>
               <label className="block text-sm font-semibold mb-2 text-gray-700">
-                👤 Mas'ul mobilograf
+                👤 Mas'ul mobilograf *
               </label>
               <select
                 value={newProject.mobilographer_id}
@@ -129,7 +142,7 @@ export default function YangiLoyihaPage() {
 
             <div>
               <label className="block text-sm font-semibold mb-2 text-gray-700">
-                🎯 Oylik maqsad (nechta post)
+                🎯 Oylik maqsad (nechta post) *
               </label>
               <input
                 type="number"
