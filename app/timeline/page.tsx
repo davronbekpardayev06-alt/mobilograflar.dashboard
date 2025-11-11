@@ -82,14 +82,36 @@ export default function TimelinePage() {
         let storisCount = 0
         let syomkaCount = 0
         
-        // Records'dan hisoblash
+        // Records'dan hisoblash - TAFSILOT BILAN
+        const recordsWithDetails: any[] = []
         dayRecords.forEach(record => {
           const count = record.count || 1
           if (record.type === 'editing') {
-            if (record.content_type === 'post') postCount += count
-            else if (record.content_type === 'storis') storisCount += count
+            if (record.content_type === 'post') {
+              postCount += count
+              recordsWithDetails.push({
+                type: 'post',
+                count,
+                mobilographer: record.mobilographers?.name,
+                project: record.projects?.name
+              })
+            } else if (record.content_type === 'storis') {
+              storisCount += count
+              recordsWithDetails.push({
+                type: 'storis',
+                count,
+                mobilographer: record.mobilographers?.name,
+                project: record.projects?.name
+              })
+            }
           } else if (record.type === 'filming') {
             syomkaCount += count
+            recordsWithDetails.push({
+              type: 'syomka',
+              count,
+              mobilographer: record.mobilographers?.name,
+              project: record.projects?.name
+            })
           }
         })
 
@@ -109,7 +131,8 @@ export default function TimelinePage() {
           storisCount,
           syomkaCount,
           deadlines: dayDeadlines,
-          records: dayRecords
+          records: dayRecords,
+          recordsWithDetails  // YANGI - TAFSILOT!
         })
       }
 
@@ -235,38 +258,38 @@ export default function TimelinePage() {
             </div>
 
             {day.isPast || day.isToday ? (
-              // OXIRGI KUNLAR - Qilindi ma'lumoti bilan
+              // OXIRGI KUNLAR - Qilindi ma'lumoti bilan TAFSILOT
               <div className="space-y-2">
-                {day.hasWork && (
+                {day.hasWork && day.recordsWithDetails && day.recordsWithDetails.length > 0 && (
                   <>
                     <div className="text-xs font-semibold text-green-600 mb-2">
                       ✅ Qilindi
                     </div>
                     
-                    {day.records.map((record: any, idx: number) => (
+                    {day.recordsWithDetails.map((detail: any, idx: number) => (
                       <div key={idx} className="text-xs bg-green-100 text-green-700 px-2 py-2 rounded mb-1">
-                        <div className="font-bold">{record.projects?.name}</div>
+                        <div className="font-bold">{detail.project}</div>
                         <div className="text-xs opacity-80">
-                          👤 {record.mobilographers?.name}
+                          👤 {detail.mobilographer}
                         </div>
                         <div className="flex items-center gap-1 mt-1">
-                          {record.type === 'editing' && record.content_type === 'post' && (
+                          {detail.type === 'post' && (
                             <span className="bg-green-200 text-green-800 px-2 py-0.5 rounded text-xs font-bold">
                               📄 POST
                             </span>
                           )}
-                          {record.type === 'editing' && record.content_type === 'storis' && (
+                          {detail.type === 'storis' && (
                             <span className="bg-pink-200 text-pink-800 px-2 py-0.5 rounded text-xs font-bold">
                               📱 STORIS
                             </span>
                           )}
-                          {record.type === 'filming' && (
+                          {detail.type === 'syomka' && (
                             <span className="bg-blue-200 text-blue-800 px-2 py-0.5 rounded text-xs font-bold">
                               📹 SYOMKA
                             </span>
                           )}
-                          {record.count > 1 && (
-                            <span className="font-bold ml-1">x{record.count}</span>
+                          {detail.count > 1 && (
+                            <span className="font-bold ml-1">x{detail.count}</span>
                           )}
                         </div>
                       </div>
@@ -535,7 +558,7 @@ export default function TimelinePage() {
                   </button>
                 </div>
                 <p className="text-xs text-gray-500 mt-2">
-                  ⚠️ Eslatma: Syomka progress'ga hisoblAnmaydi, faqat montaj post hisoblanadi
+                  ⚠️ Eslatma: Syomka progress'ga hisoblanmaydi, faqat montaj post hisoblanadi
                 </p>
               </div>
 
@@ -548,10 +571,10 @@ export default function TimelinePage() {
                     type="date"
                     value={newReja.deadline_date}
                     onChange={(e) => setNewReja({ ...newReja, deadline_date: e.target.value })}
-                    min={new Date().toISOString().split('T')[0]}
                     className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all outline-none text-lg"
                     required
                   />
+                  <p className="text-xs text-gray-500 mt-1">Aniq sana tanlang</p>
                 </div>
 
                 <div>
@@ -600,7 +623,7 @@ export default function TimelinePage() {
           <div>
             <h3 className="font-bold text-lg mb-2">Timeline haqida:</h3>
             <ul className="text-sm text-gray-700 space-y-1">
-              <li>✅ <strong>Qilindi:</strong> Records'dan kiritilgan ishlar (kim, loyiha, ish turi ko'rsatiladi)</li>
+              <li>✅ <strong>Qilindi:</strong> Records'dan kiritilgan ishlar (Loyiha, Kim, Ish turi)</li>
               <li>✅ <strong>Reja:</strong> Kelgusi kunlar uchun rejalashtirilgan ishlar</li>
               <li>✅ <strong>Qilinmagan:</strong> Deadline o'tgan, bajarilmagan rejalar</li>
               <li>⚠️ <strong>Progress:</strong> Faqat MONTAJ POST hisoblanadi (Syomka va Storis emas)</li>
