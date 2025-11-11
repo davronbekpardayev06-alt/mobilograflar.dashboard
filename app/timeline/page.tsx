@@ -162,6 +162,25 @@ export default function TimelinePage() {
     }
   }
 
+  const handleDeleteReja = async (videoId: string) => {
+    if (!confirm('Bu rejani o\'chirmoqchimisiz?')) return
+
+    try {
+      const { error } = await supabase
+        .from('videos')
+        .delete()
+        .eq('id', videoId)
+
+      if (error) throw error
+
+      alert('✅ Reja o\'chirildi!')
+      fetchData()
+    } catch (error) {
+      console.error('Error:', error)
+      alert('❌ Xatolik yuz berdi!')
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -285,8 +304,15 @@ export default function TimelinePage() {
                 
                 {day.deadlines.length > 0 ? (
                   day.deadlines.map((video: any, idx: number) => (
-                    <div key={idx} className="text-xs bg-orange-100 text-orange-700 px-2 py-2 rounded">
-                      <div className="font-bold">{video.projects?.name}</div>
+                    <div key={idx} className="text-xs bg-orange-100 text-orange-700 px-2 py-2 rounded relative">
+                      <button
+                        onClick={() => handleDeleteReja(video.id)}
+                        className="absolute top-1 right-1 text-red-600 hover:text-red-800 text-lg transition"
+                        title="Rejani o'chirish"
+                      >
+                        ✕
+                      </button>
+                      <div className="font-bold pr-6">{video.projects?.name}</div>
                       <div className="text-xs opacity-80">
                         👤 {video.assigned_mobilographer?.name || 'Noma\'lum'}
                       </div>
@@ -328,8 +354,15 @@ export default function TimelinePage() {
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {day.deadlines.map((video: any, idx: number) => (
-                      <div key={idx} className="bg-orange-50 border border-orange-200 rounded-xl p-3">
-                        <div className="flex items-center justify-between mb-2">
+                      <div key={idx} className="bg-orange-50 border border-orange-200 rounded-xl p-3 relative">
+                        <button
+                          onClick={() => handleDeleteReja(video.id)}
+                          className="absolute top-2 right-2 text-red-600 hover:text-red-800 text-xl transition"
+                          title="Rejani o'chirish"
+                        >
+                          🗑️
+                        </button>
+                        <div className="flex items-center justify-between mb-2 pr-8">
                           <span className="font-bold">{video.projects?.name}</span>
                           <span className="text-sm text-orange-600">
                             {video.task_type === 'syomka' ? '📹 Syomka' : '🎬 Montaj'}
