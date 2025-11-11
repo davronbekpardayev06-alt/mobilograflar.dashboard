@@ -30,10 +30,10 @@ export default function LoyihalarPage() {
         const currentYear = now.getFullYear()
         
         const thisMonthVideos = project.videos?.filter((v: any) => {
-          // FAQAT KIRITISHDAN YARATILGAN VA POST BO'LGAN VIDEOLAR!
+          // FAQAT KIRITISHDAN YARATILGAN POST'LAR!
           if (v.editing_status !== 'completed') return false
-          if (v.content_type !== 'post') return false
-          if (!v.record_id) return false  // MUHIM! Faqat kiritishdan yaratilgan
+          if (v.content_type !== 'post') return false  // FAQAT POST!
+          if (!v.record_id) return false  // FAQAT KIRITISHDAN!
           
           const videoDate = new Date(v.created_at)
           return videoDate.getMonth() === currentMonth && videoDate.getFullYear() === currentYear
@@ -139,7 +139,7 @@ export default function LoyihalarPage() {
           <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
             📁 Loyihalar
           </h1>
-          <p className="text-sm text-gray-500 mt-1">📅 {getCurrentMonthName()} - Oylik Progress</p>
+          <p className="text-sm text-gray-500 mt-1">📅 {getCurrentMonthName()} - Oylik Progress (Faqat POST)</p>
         </div>
         <Link href="/loyihalar/yangi">
           <button className="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white px-6 py-3 rounded-xl font-semibold flex items-center gap-2 transition transform hover:scale-105">
