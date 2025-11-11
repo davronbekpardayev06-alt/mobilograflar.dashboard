@@ -94,38 +94,70 @@ export default function KiritishPage() {
     }
 
     try {
-      const { data: videos } = await supabase
+      console.log('Deleting record:', id)
+
+      // 1. Shu record bilan bog'liq videolarni topish
+      const { data: videos, error: fetchError } = await supabase
         .from('videos')
         .select('*')
         .eq('record_id', id)
 
+      if (fetchError) {
+        console.error('Fetch error:', fetchError)
+        throw fetchError
+      }
+
+      console.log('Found videos:', videos)
+
+      // 2. Videolarni qaytarish yoki o'chirish
       if (videos && videos.length > 0) {
         for (const video of videos) {
           if (video.editing_status === 'completed') {
-            await supabase
+            // Montaj qilingan videolarni pending qilish
+            const { error: updateError } = await supabase
               .from('videos')
               .update({ 
                 editing_status: 'pending', 
                 record_id: null 
               })
               .eq('id', video.id)
+            
+            if (updateError) {
+              console.error('Update error:', updateError)
+              throw updateError
+            }
+            
+            console.log('Reverted video to pending:', video.id)
           } else {
-            await supabase
+            // Syomka qilingan videolarni butunlay o'chirish
+            const { error: deleteVideoError } = await supabase
               .from('videos')
               .delete()
               .eq('id', video.id)
+            
+            if (deleteVideoError) {
+              console.error('Delete video error:', deleteVideoError)
+              throw deleteVideoError
+            }
+            
+            console.log('Deleted video:', video.id)
           }
         }
       }
 
+      // 3. Record'ni o'chirish
       const { error: deleteError } = await supabase
         .from('records')
         .delete()
         .eq('id', id)
 
-      if (deleteError) throw deleteError
+      if (deleteError) {
+        console.error('Delete record error:', deleteError)
+        throw deleteError
+      }
 
-      alert('✅ Yozuv o\'chirildi!')
+      console.log('Record deleted successfully')
+      alert('✅ Yozuv o\'chirildi va loyiha yangilandi!')
       setDeleteConfirm(null)
       fetchData()
     } catch (error) {
@@ -163,6 +195,7 @@ export default function KiritishPage() {
       if (recordError) throw recordError
 
       const recordId = createdRecord.id
+      console.log('Created record:', recordId)
 
       if (newRecord.type === 'editing') {
         const { data: pendingVideos } = await supabase
@@ -172,6 +205,8 @@ export default function KiritishPage() {
           .eq('editing_status', 'pending')
           .is('record_id', null)
           .limit(newRecord.count)
+
+        console.log('Found pending videos:', pendingVideos)
 
         if (pendingVideos && pendingVideos.length > 0) {
           const videoIds = pendingVideos.map(v => v.id)
@@ -183,6 +218,8 @@ export default function KiritishPage() {
               record_id: recordId
             })
             .in('id', videoIds)
+          
+          console.log('Updated videos to completed:', videoIds)
         } else {
           const videosToInsert = []
           for (let i = 0; i < newRecord.count; i++) {
@@ -196,6 +233,7 @@ export default function KiritishPage() {
             })
           }
           await supabase.from('videos').insert(videosToInsert)
+          console.log('Created new videos:', videosToInsert.length)
         }
       }
 
@@ -212,6 +250,7 @@ export default function KiritishPage() {
           })
         }
         await supabase.from('videos').insert(videosToInsert)
+        console.log('Created new videos:', videosToInsert.length)
       }
 
       alert(`✅ ${newRecord.count} ta ${newRecord.type === 'editing' ? newRecord.content_type === 'post' ? 'post' : 'storis' : 'syomka'} muvaffaqiyatli qo'shildi!`)
