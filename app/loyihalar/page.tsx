@@ -19,18 +19,22 @@ export default function LoyihalarPage() {
         .select(`
           *,
           mobilographers(name),
-          videos(id, editing_status, content_type, deadline, created_at)
+          videos(id, editing_status, content_type, deadline, created_at, record_id)
         `)
         .order('name')
 
       const projectsWithProgress = data?.map(project => {
-        // FAQAT SHU OYNING POST'LARINI HISOBLASH!
+        // FAQAT SHU OYNING POST'LARINI HISOBLASH - FAQAT KIRITISHDAN!
         const now = new Date()
         const currentMonth = now.getMonth()
         const currentYear = now.getFullYear()
         
         const thisMonthVideos = project.videos?.filter((v: any) => {
-          if (v.editing_status !== 'completed' || v.content_type !== 'post') return false
+          // FAQAT KIRITISHDAN YARATILGAN VA POST BO'LGAN VIDEOLAR!
+          if (v.editing_status !== 'completed') return false
+          if (v.content_type !== 'post') return false
+          if (!v.record_id) return false  // MUHIM! Faqat kiritishdan yaratilgan
+          
           const videoDate = new Date(v.created_at)
           return videoDate.getMonth() === currentMonth && videoDate.getFullYear() === currentYear
         })
