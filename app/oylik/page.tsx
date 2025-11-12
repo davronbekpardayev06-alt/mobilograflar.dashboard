@@ -7,16 +7,43 @@ export default function OylikPage() {
   const [stats, setStats] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedMonth, setSelectedMonth] = useState(new Date())
+  const [allVideos, setAllVideos] = useState<any[]>([])
 
   useEffect(() => {
-    fetchData()
-  }, [selectedMonth])
+    loadAllData()
+  }, [])
 
-  const fetchData = async () => {
+  useEffect(() => {
+    if (allVideos.length > 0) {
+      calculateStats()
+    }
+  }, [selectedMonth, allVideos])
+
+  const loadAllData = async () => {
     setLoading(true)
     
-    const month = selectedMonth.getMonth() + 1 // 1-12
+    // BARCHA MA'LUMOTLARNI BIR MARTA YUKLAYMIZ
+    const { data: videos } = await supabase
+      .from('videos')
+      .select('*')
+      .not('record_id', 'is', null)
+
+    setAllVideos(videos || [])
+    setLoading(false)
+  }
+
+  const calculateStats = async () => {
+    const month = selectedMonth.getMonth() + 1
     const year = selectedMonth.getFullYear()
+
+    // Bu oydagi videolar
+    const monthVideos = allVideos.filter(v => {
+      const d = new Date(v.created_at)
+      return d.getMonth() + 1 === month && d.getFullYear() === year
+    })
+
+    console.log(`📅 Oy: ${month}/${year}`)
+    console.log(`📹 Bu oydagi videolar:`, monthVideos.length)
 
     // Mobilograflar
     const { data: mobilographers } = await supabase
@@ -29,42 +56,29 @@ export default function OylikPage() {
       .from('projects')
       .select('*')
 
-    // Videolar - SQL EXTRACT ishlatamiz!
-    const { data: videos } = await supabase
-      .from('videos')
-      .select('*')
-      .not('record_id', 'is', null)
-
-    // JavaScript'da filter qilamiz (SQL EXTRACT ishlamasa)
-    const filteredVideos = (videos || []).filter((v: any) => {
-      const vDate = new Date(v.created_at)
-      return vDate.getMonth() + 1 === month && vDate.getFullYear() === year
-    })
-
-    console.log(`📅 Tanlangan: ${month}/${year}`)
-    console.log(`📹 Jami videolar:`, videos?.length)
-    console.log(`📹 Bu oydagi videolar:`, filteredVideos.length)
-
-    // Statistika
+    // Har bir mobilograf uchun
     const result = (mobilographers || []).map(mob => {
-      const mobVids = filteredVideos.filter((v: any) => v.assigned_mobilographer_id === mob.id)
+      const mobVids = monthVideos.filter(v => v.assigned_mobilographer_id === mob.id)
       
-      const post = mobVids.filter((v: any) => 
-        v.task_type === 'montaj' && v.content_type === 'post' && v.editing_status === 'completed'
+      const post = mobVids.filter(v => 
+        v.task_type === 'montaj' && 
+        v.content_type === 'post' && 
+        v.editing_status === 'completed'
       ).length
       
-      const storis = mobVids.filter((v: any) => 
-        v.task_type === 'montaj' && v.content_type === 'storis' && v.editing_status === 'completed'
+      const storis = mobVids.filter(v => 
+        v.task_type === 'montaj' && 
+        v.content_type === 'storis' && 
+        v.editing_status === 'completed'
       ).length
       
-      const syomka = mobVids.filter((v: any) => 
-        v.task_type === 'syomka' && v.filming_status === 'completed'
+      const syomka = mobVids.filter(v => 
+        v.task_type === 'syomka' && 
+        v.filming_status === 'completed'
       ).length
 
-      console.log(`👤 ${mob.name}: Post=${post}, Storis=${storis}, Syomka=${syomka}`)
-
-      const mobProjects = (projects || []).filter((p: any) => p.mobilographer_id === mob.id)
-      const target = mobProjects.reduce((sum: number, p: any) => sum + (p.monthly_target || 0), 0)
+      const mobProjects = (projects || []).filter(p => p.mobilographer_id === mob.id)
+      const target = mobProjects.reduce((sum, p) => sum + (p.monthly_target || 0), 0)
       const progress = target > 0 ? Math.round((post / target) * 100) : 0
 
       return {
@@ -80,7 +94,6 @@ export default function OylikPage() {
     }).sort((a, b) => b.total - a.total)
 
     setStats(result)
-    setLoading(false)
   }
 
   const changeMonth = (dir: number) => {
@@ -137,37 +150,37 @@ export default function OylikPage() {
         <div className="flex items-center justify-between">
           <button
             onClick={() => changeMonth(-1)}
-            className="px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-bold"
+            className="px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-bold transition"
           >
             ← Oldingi
           </button>
           <h2 className="text-3xl font-bold">{getMonthName()}</h2>
           <button
             onClick={() => changeMonth(1)}
-            className="px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-bold"
+            className="px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-bold transition"
           >
             Keyingi →
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-6">
-        <div className="bg-green-500 text-white rounded-2xl p-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl p-6 shadow-lg">
           <div className="text-4xl mb-2">📄</div>
           <div className="text-lg mb-2">Post Montaj</div>
           <div className="text-5xl font-bold">{total.post}</div>
         </div>
-        <div className="bg-pink-500 text-white rounded-2xl p-6">
+        <div className="bg-gradient-to-br from-pink-500 to-pink-600 text-white rounded-2xl p-6 shadow-lg">
           <div className="text-4xl mb-2">📱</div>
           <div className="text-lg mb-2">Storis</div>
           <div className="text-5xl font-bold">{total.storis}</div>
         </div>
-        <div className="bg-blue-500 text-white rounded-2xl p-6">
+        <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl p-6 shadow-lg">
           <div className="text-4xl mb-2">📹</div>
           <div className="text-lg mb-2">Syomka</div>
           <div className="text-5xl font-bold">{total.syomka}</div>
         </div>
-        <div className="bg-orange-500 text-white rounded-2xl p-6">
+        <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-2xl p-6 shadow-lg">
           <div className="text-4xl mb-2">⭐</div>
           <div className="text-lg mb-2">Jami Ball</div>
           <div className="text-5xl font-bold">{total.ball}</div>
@@ -178,12 +191,14 @@ export default function OylikPage() {
         <div className="card-modern">
           <h3 className="text-xl font-bold mb-4">📊 Umumiy Progress</h3>
           <div className="flex items-center justify-between mb-3">
-            <span>{total.completed}/{total.target} post</span>
-            <span className="text-3xl font-bold">{Math.round((total.completed / total.target) * 100)}%</span>
+            <span className="text-lg">{total.completed}/{total.target} post</span>
+            <span className="text-3xl font-bold text-blue-600">
+              {Math.round((total.completed / total.target) * 100)}%
+            </span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-6">
             <div
-              className="h-6 rounded-full bg-blue-500"
+              className="h-6 rounded-full bg-gradient-to-r from-blue-500 to-purple-600"
               style={{ width: `${Math.min((total.completed / total.target) * 100, 100)}%` }}
             />
           </div>
@@ -192,52 +207,59 @@ export default function OylikPage() {
 
       <div className="card-modern">
         <h2 className="text-2xl font-bold mb-6">🏆 Reyting</h2>
-        <div className="space-y-4">
-          {stats.map((m, i) => (
-            <div key={m.id} className={`p-6 rounded-2xl bg-gradient-to-r ${getColor(i)} text-white`}>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center text-3xl font-bold">
-                    {getEmoji(i)}
+        {stats.length > 0 ? (
+          <div className="space-y-4">
+            {stats.map((m, i) => (
+              <div key={m.id} className={`p-6 rounded-2xl bg-gradient-to-r ${getColor(i)} text-white shadow-lg`}>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center text-3xl font-bold">
+                      {getEmoji(i)}
+                    </div>
+                    <h3 className="text-2xl font-bold">{m.name}</h3>
                   </div>
-                  <h3 className="text-2xl font-bold">{m.name}</h3>
+                  <div className="text-right">
+                    <div className="text-5xl font-bold">{m.total}</div>
+                    <div className="text-sm opacity-90">jami ball</div>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-5xl font-bold">{m.total}</div>
-                  <div className="text-sm">jami ball</div>
-                </div>
-              </div>
 
-              <div className="grid grid-cols-3 gap-4 mb-4">
-                <div className="bg-white bg-opacity-20 rounded-xl p-3 text-center">
-                  <div className="text-3xl font-bold">{m.post}</div>
-                  <div className="text-xs">📄 Post</div>
+                <div className="grid grid-cols-3 gap-4 mb-4">
+                  <div className="bg-white bg-opacity-20 rounded-xl p-3 text-center">
+                    <div className="text-3xl font-bold">{m.post}</div>
+                    <div className="text-xs opacity-90">📄 Post</div>
+                  </div>
+                  <div className="bg-white bg-opacity-20 rounded-xl p-3 text-center">
+                    <div className="text-3xl font-bold">{m.storis}</div>
+                    <div className="text-xs opacity-90">📱 Storis</div>
+                  </div>
+                  <div className="bg-white bg-opacity-20 rounded-xl p-3 text-center">
+                    <div className="text-3xl font-bold">{m.syomka}</div>
+                    <div className="text-xs opacity-90">📹 Syomka</div>
+                  </div>
                 </div>
-                <div className="bg-white bg-opacity-20 rounded-xl p-3 text-center">
-                  <div className="text-3xl font-bold">{m.storis}</div>
-                  <div className="text-xs">📱 Storis</div>
-                </div>
-                <div className="bg-white bg-opacity-20 rounded-xl p-3 text-center">
-                  <div className="text-3xl font-bold">{m.syomka}</div>
-                  <div className="text-xs">📹 Syomka</div>
-                </div>
-              </div>
 
-              {m.target > 0 && (
-                <div className="bg-white bg-opacity-20 rounded-xl p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-semibold">📊 Progress</span>
-                    <span className="text-2xl font-bold">{m.progress}%</span>
+                {m.target > 0 && (
+                  <div className="bg-white bg-opacity-20 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-semibold">📊 Progress</span>
+                      <span className="text-2xl font-bold">{m.progress}%</span>
+                    </div>
+                    <div className="w-full bg-white bg-opacity-30 rounded-full h-3 mb-2">
+                      <div className="h-3 rounded-full bg-white" style={{ width: `${Math.min(m.progress, 100)}%` }} />
+                    </div>
+                    <div className="text-xs opacity-90">{m.post}/{m.target} post</div>
                   </div>
-                  <div className="w-full bg-white bg-opacity-30 rounded-full h-3 mb-2">
-                    <div className="h-3 rounded-full bg-white" style={{ width: `${Math.min(m.progress, 100)}%` }} />
-                  </div>
-                  <div className="text-xs">{m.post}/{m.target} post</div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12 bg-gray-50 rounded-xl">
+            <div className="text-6xl mb-4">📊</div>
+            <p className="text-gray-500 text-lg">Bu oyda hozircha ma'lumot yo'q</p>
+          </div>
+        )}
       </div>
     </div>
   )
