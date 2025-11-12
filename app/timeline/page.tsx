@@ -153,13 +153,14 @@ export default function TimelinePage() {
     }
 
     try {
+      // SANA TO'G'RIDAN-TO'G'RI SAQLANADI (deadline endi DATE tip - timezone yo'q!)
       const { error } = await supabase
         .from('videos')
         .insert([{
           project_id: newReja.project_id,
           assigned_mobilographer_id: newReja.mobilographer_id,
           name: newReja.name,
-          deadline: newReja.deadline_date,
+          deadline: newReja.deadline_date,  // DATE tip - aniq sana
           deadline_time: newReja.deadline_time,
           task_type: newReja.task_type,
           filming_status: newReja.task_type === 'syomka' ? 'pending' : 'completed',
@@ -574,7 +575,7 @@ export default function TimelinePage() {
                     className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all outline-none text-lg"
                     required
                   />
-                  <p className="text-xs text-gray-500 mt-1">Aniq sana tanlang</p>
+                  <p className="text-xs text-green-600 mt-1 font-semibold">✅ Timezone tuzatildi!</p>
                 </div>
 
                 <div>
@@ -623,10 +624,11 @@ export default function TimelinePage() {
           <div>
             <h3 className="font-bold text-lg mb-2">Timeline haqida:</h3>
             <ul className="text-sm text-gray-700 space-y-1">
-              <li>✅ <strong>Qilindi:</strong> Records'dan kiritilgan ishlar (Loyiha, Kim, Ish turi)</li>
+              <li>✅ <strong>Qilindi:</strong> Loyiha nomi, Kim qildi, Ish turi ko'rsatiladi</li>
               <li>✅ <strong>Reja:</strong> Kelgusi kunlar uchun rejalashtirilgan ishlar</li>
               <li>✅ <strong>Qilinmagan:</strong> Deadline o'tgan, bajarilmagan rejalar</li>
-              <li>⚠️ <strong>Progress:</strong> Faqat MONTAJ POST hisoblanadi (Syomka va Storis emas)</li>
+              <li>✅ <strong>Sana:</strong> Timezone tuzatildi - 13-noyabr = 13-noyabr</li>
+              <li>⚠️ <strong>Progress:</strong> Faqat MONTAJ POST hisoblanadi</li>
             </ul>
           </div>
         </div>
