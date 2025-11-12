@@ -7,7 +7,7 @@ export default function OylikPage() {
   const [stats, setStats] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedMonth, setSelectedMonth] = useState(new Date())
-  const [allProjects, setAllProjects] = useState<any[]>([])
+  const [debugInfo, setDebugInfo] = useState<any>({})
 
   useEffect(() => {
     fetchData()
@@ -18,50 +18,84 @@ export default function OylikPage() {
       setLoading(true)
       const month = selectedMonth.getMonth()
       const year = selectedMonth.getFullYear()
+      const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`
+      const endDate = `${year}-${String(month + 1).padStart(2, '0')}-31`
 
-      // 1. Barcha mobilograflarni olish
-      const { data: mobilographers } = await supabase
+      console.log('🗓️ OY:', month + 1, 'YIL:', year)
+      console.log('📅 BOSHLANISH:', startDate, 'TUGASH:', endDate)
+
+      // 1. Mobilograflar
+      const { data: mobilographers, error: mobError } = await supabase
         .from('mobilographers')
         .select('*')
         .order('name')
 
-      // 2. Barcha loyihalarni olish (HAR BIRINING O'Z MAQSADI BILAN)
-      const { data: projects } = await supabase
+      if (mobError) {
+        console.error('❌ MOBILOGRAFLAR XATO:', mobError)
+        return
+      }
+
+      console.log('👥 MOBILOGRAFLAR:', mobilographers?.length)
+
+      // 2. Loyihalar
+      const { data: projects, error: projError } = await supabase
         .from('projects')
         .select('*')
 
-      setAllProjects(projects || [])
+      if (projError) {
+        console.error('❌ LOYIHALAR XATO:', projError)
+        return
+      }
 
-      // 3. Barcha videolarni olish (SHU OY, FAQAT KIRITILGAN)
-      const { data: allVideos } = await supabase
+      console.log('📁 LOYIHALAR:', projects?.length)
+
+      // 3. Videolar - SHU OY
+      const { data: allVideos, error: vidError } = await supabase
         .from('videos')
         .select('*')
-        .not('record_id', 'is', null) // Faqat kiritilgan ishlar (reja emas!)
-        .gte('created_at', `${year}-${String(month + 1).padStart(2, '0')}-01`)
-        .lte('created_at', `${year}-${String(month + 1).padStart(2, '0')}-31`)
+        .not('record_id', 'is', null)
+        .gte('created_at', startDate)
+        .lte('created_at', endDate)
 
-      // 4. Har bir mobilograf uchun statistika
+      if (vidError) {
+        console.error('❌ VIDEOLAR XATO:', vidError)
+        return
+      }
+
+      console.log('📹 SHU OY VIDEOLAR:', allVideos?.length)
+      console.log('📹 BIRINCHI 3 TA VIDEO:', allVideos?.slice(0, 3))
+
+      // Debug info saqlash
+      setDebugInfo({
+        mobilographers: mobilographers?.length || 0,
+        projects: projects?.length || 0,
+        videos: allVideos?.length || 0,
+        month: month + 1,
+        year,
+        startDate,
+        endDate
+      })
+
+      // 4. Har bir mobilograf uchun
       const mobilographersWithStats = mobilographers?.map(mob => {
-        // SHU MOBILOGRAF QILGAN BARCHA ISHLAR (assigned_mobilographer_id)
         const mobVideos = allVideos?.filter((v: any) => 
           v.assigned_mobilographer_id === mob.id
         ) || []
 
-        // POST MONTAJ (progress uchun)
+        console.log(`👤 ${mob.name}: ${mobVideos.length} ta video`)
+
         const postVideos = mobVideos.filter((v: any) => 
           v.task_type === 'montaj' && 
           v.content_type === 'post' && 
           v.editing_status === 'completed'
         )
         
-        // STORIS MONTAJ (ball uchun)
         const storisVideos = mobVideos.filter((v: any) => 
           v.task_type === 'montaj' && 
           v.content_type === 'storis' && 
           v.editing_status === 'completed'
         )
         
-        // SYOMKA (ball uchun)
         const syomkaVideos = mobVideos.filter((v: any) => 
           v.task_type === 'syomka' && 
           v.filming_status === 'completed'
@@ -72,16 +106,13 @@ export default function OylikPage() {
         const syomkaCount = syomkaVideos.length
         const totalPoints = postCount + storisCount + syomkaCount
 
-        // LOYIHALAR SONI - qaysi loyihalarda ishtirok etgan
+        console.log(`${mob.name}: Post=${postCount}, Storis=${storisCount}, Syomka=${syomkaCount}, Ball=${totalPoints}`)
+
         const projectIds = new Set(mobVideos.map((v: any) => v.project_id).filter(Boolean))
         const projectsCount = projectIds.size
 
-        // SHU MOBILOGRAFNING BARCHA LOYIHALARINING MAQSADLARI
-        // Har bir loyihaning o'z maqsadi qo'shiladi (6, 8, 12, va h.k.)
         const mobProjects = projects?.filter(p => p.mobilographer_id === mob.id) || []
         const totalTarget = mobProjects.reduce((sum, p) => sum + (p.monthly_target || 0), 0)
-        
-        // PROGRESS HISOBLASH
         const progress = totalTarget > 0 ? Math.round((postCount / totalTarget) * 100) : 0
 
         return {
@@ -96,12 +127,14 @@ export default function OylikPage() {
           progress,
           projectsCount
         }
-      }).sort((a, b) => b.totalPoints - a.totalPoints) // Ball bo'yicha reyting
+      }).sort((a, b) => b.totalPoints - a.totalPoints)
+
+      console.log('✅ FINAL STATISTIKA:', mobilographersWithStats)
 
       setStats(mobilographersWithStats || [])
       setLoading(false)
     } catch (error) {
-      console.error('❌ Error:', error)
+      console.error('❌ UMUMIY XATO:', error)
       setLoading(false)
     }
   }
@@ -165,6 +198,29 @@ export default function OylikPage() {
         </button>
       </div>
 
+      {/* DEBUG INFO */}
+      <div className="card-modern bg-yellow-50 border-2 border-yellow-300">
+        <h3 className="font-bold text-lg mb-2">🐛 Debug Ma'lumot (F12 → Console'da ko'proq):</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div>
+            <p className="text-gray-600">Mobilograflar:</p>
+            <p className="font-bold text-xl">{debugInfo.mobilographers}</p>
+          </div>
+          <div>
+            <p className="text-gray-600">Loyihalar:</p>
+            <p className="font-bold text-xl">{debugInfo.projects}</p>
+          </div>
+          <div>
+            <p className="text-gray-600">Videolar (shu oy):</p>
+            <p className="font-bold text-xl">{debugInfo.videos}</p>
+          </div>
+          <div>
+            <p className="text-gray-600">Oy:</p>
+            <p className="font-bold text-xl">{debugInfo.month}/{debugInfo.year}</p>
+          </div>
+        </div>
+      </div>
+
       {/* Month Selector */}
       <div className="card-modern">
         <div className="flex items-center justify-between">
@@ -197,7 +253,7 @@ export default function OylikPage() {
             <span className="text-lg opacity-90">Post Montaj</span>
           </div>
           <div className="text-5xl font-bold">{totalStats.post}</div>
-          <div className="text-xs opacity-80 mt-1">Videos'dan</div>
+          <div className="text-xs opacity-80 mt-1">Kim ish qildi</div>
         </div>
 
         <div className="bg-gradient-to-br from-pink-500 to-pink-600 text-white rounded-2xl p-6 shadow-lg">
@@ -206,7 +262,7 @@ export default function OylikPage() {
             <span className="text-lg opacity-90">Storis Montaj</span>
           </div>
           <div className="text-5xl font-bold">{totalStats.storis}</div>
-          <div className="text-xs opacity-80 mt-1">Videos'dan</div>
+          <div className="text-xs opacity-80 mt-1">Kim ish qildi</div>
         </div>
 
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl p-6 shadow-lg">
@@ -215,7 +271,7 @@ export default function OylikPage() {
             <span className="text-lg opacity-90">Syomka</span>
           </div>
           <div className="text-5xl font-bold">{totalStats.syomka}</div>
-          <div className="text-xs opacity-80 mt-1">Videos'dan</div>
+          <div className="text-xs opacity-80 mt-1">Kim ish qildi</div>
         </div>
 
         <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-2xl p-6 shadow-lg">
@@ -229,28 +285,27 @@ export default function OylikPage() {
       </div>
 
       {/* Progress Umumiy */}
-      <div className="card-modern">
-        <h3 className="text-xl font-bold mb-4">📊 Umumiy Progress (Faqat MONTAJ POST)</h3>
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-lg text-gray-700">
-            📄 {totalStats.totalCompleted}/{totalStats.totalTarget} post montaj
-          </span>
-          <span className="text-3xl font-bold text-blue-600">
-            {totalStats.totalTarget > 0 ? Math.round((totalStats.totalCompleted / totalStats.totalTarget) * 100) : 0}%
-          </span>
+      {totalStats.totalTarget > 0 && (
+        <div className="card-modern">
+          <h3 className="text-xl font-bold mb-4">📊 Umumiy Progress (Faqat MONTAJ POST)</h3>
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-lg text-gray-700">
+              📄 {totalStats.totalCompleted}/{totalStats.totalTarget} post montaj
+            </span>
+            <span className="text-3xl font-bold text-blue-600">
+              {Math.round((totalStats.totalCompleted / totalStats.totalTarget) * 100)}%
+            </span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-6">
+            <div
+              className="progress-bar h-6 rounded-full bg-gradient-to-r from-blue-500 to-purple-600"
+              style={{ 
+                width: `${Math.min((totalStats.totalCompleted / totalStats.totalTarget) * 100, 100)}%` 
+              }}
+            />
+          </div>
         </div>
-        <div className="w-full bg-gray-200 rounded-full h-6">
-          <div
-            className="progress-bar h-6 rounded-full bg-gradient-to-r from-blue-500 to-purple-600"
-            style={{ 
-              width: `${Math.min(totalStats.totalTarget > 0 ? (totalStats.totalCompleted / totalStats.totalTarget) * 100 : 0, 100)}%` 
-            }}
-          />
-        </div>
-        <p className="text-sm text-gray-500 mt-2">
-          {allProjects.length} ta loyiha - har birining o'z maqsadi qo'shildi
-        </p>
-      </div>
+      )}
 
       {/* Mobilograflar Reytingi */}
       <div className="card-modern">
@@ -272,7 +327,7 @@ export default function OylikPage() {
                     </div>
                     <div>
                       <h3 className="text-2xl font-bold">{mob.name}</h3>
-                      <p className="text-sm opacity-90">{mob.projectsCount} ta loyihada ishtirok</p>
+                      <p className="text-sm opacity-90">{mob.projectsCount} ta loyihada</p>
                     </div>
                   </div>
                   <div className="text-right">
@@ -296,13 +351,10 @@ export default function OylikPage() {
                   </div>
                 </div>
 
-                {/* Progress */}
                 {mob.totalTarget > 0 && (
                   <div className="bg-white bg-opacity-20 rounded-xl p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-semibold">
-                        📊 Progress (Barcha loyihalar maqsadi)
-                      </span>
+                      <span className="text-sm font-semibold">📊 Progress</span>
                       <span className="text-2xl font-bold">{mob.progress}%</span>
                     </div>
                     <div className="w-full bg-white bg-opacity-30 rounded-full h-3 mb-2">
@@ -312,7 +364,7 @@ export default function OylikPage() {
                       />
                     </div>
                     <div className="text-xs opacity-90">
-                      {mob.totalCompleted}/{mob.totalTarget} post montaj
+                      {mob.totalCompleted}/{mob.totalTarget} post
                     </div>
                   </div>
                 )}
@@ -326,29 +378,6 @@ export default function OylikPage() {
           </div>
         )}
       </div>
-
-      {/* Eslatma */}
-      <div className="card-modern bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200">
-        <div className="flex items-start gap-3">
-          <span className="text-3xl">ℹ️</span>
-          <div>
-            <h3 className="font-bold text-lg mb-2">Muhim ma'lumot:</h3>
-            <ul className="text-sm text-gray-700 space-y-1">
-              <li>✅ <strong>Kim ish qildi - o'shaga ball!</strong> (assigned_mobilographer_id)</li>
-              <li>✅ <strong>Progress:</strong> Har bir loyihaning o'z maqsadi qo'shiladi</li>
-              <li>✅ <strong>Misol:</strong> 3 ta loyiha (6 + 8 + 12) = 26 ta maqsad</li>
-              <li>✅ <strong>Ball hisob:</strong> Post + Storis + Syomka</li>
-              <li>✅ <strong>Reyting:</strong> Jami ball bo'yicha (yuqoridan pastga)</li>
-              <li>✅ <strong>Dadaxonbekning loyihasida Firdavs ish qilsa:</strong> Ball Firdavs'ga!</li>
-            </ul>
-          </div>
-        </div>
-      </div>
     </div>
   )
 }
-```
-
-**Commit message:**  
-```
-Fix oylik - final: correct assigned_mobilographer_id + sum all project targets (6, 8, 12, etc)
