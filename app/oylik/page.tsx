@@ -22,85 +22,65 @@ export default function OylikPage() {
         .select('*')
         .order('name')
 
-      const { data: projects } = await supabase
-        .from('projects')
+      // BARCHA VIDEOLARNI OLISH - assigned_mobilographer_id bilan
+      const { data: allVideos } = await supabase
+        .from('videos')
         .select(`
           *,
-          videos(id, editing_status, filming_status, content_type, task_type, created_at, record_id)
+          projects(id, name, monthly_target, mobilographer_id)
         `)
 
-      // RECORDS'DAN HAM HISOBLASH (BALL UCHUN)
-      const { data: records } = await supabase
-        .from('records')
-        .select('*')
-        .gte('date', `${year}-${String(month + 1).padStart(2, '0')}-01`)
-        .lte('date', `${year}-${String(month + 1).padStart(2, '0')}-31`)
-
       const mobilographersWithStats = mobilographers?.map(mob => {
-        const mobProjects = projects?.filter(p => p.mobilographer_id === mob.id) || []
-        
-        // VIDEOS'DAN - FAQAT MONTAJ POST (PROGRESS UCHUN)
-        let totalCompleted = 0
-        let totalTarget = 0
-
-        mobProjects.forEach(project => {
-          const monthVideos = project.videos?.filter((v: any) => {
-            // FAQAT MONTAJ TASK_TYPE!
-            if (v.task_type !== 'montaj') return false
-            
-            // FAQAT POST CONTENT_TYPE!
-            if (v.content_type !== 'post') return false
-            
-            // FAQAT COMPLETED EDITING_STATUS!
-            if (v.editing_status !== 'completed') return false
-            
-            // FAQAT KIRITISHDAN (record_id bor)!
-            if (!v.record_id) return false
-            
-            const videoDate = new Date(v.created_at)
-            return videoDate.getMonth() === month && videoDate.getFullYear() === year
-          })
-
-          totalCompleted += monthVideos?.length || 0
-          totalTarget += project.monthly_target || 12
-        })
-
-        // RECORDS'DAN - BARCHA ISHLAR (BALL HISOBLASH UCHUN)
-        const mobRecords = records?.filter(r => r.mobilographer_id === mob.id) || []
-        
-        // VIDEOS'DAN HAM HISOBLASH (TO'G'RI BALL)
-        const allMobVideos = mobProjects.flatMap(p => p.videos || [])
-        
-        // FAQAT KIRITILGAN VIDEOLAR
-        const completedVideos = allMobVideos.filter((v: any) => {
-          if (!v.record_id) return false // Reja emas
+        // SHU MOBILOGRAFNING SHU OYDAGI BARCHA VIDEOLARI
+        const mobVideos = allVideos?.filter((v: any) => {
+          // FAQAT KIM ISH QILGAN - ASSIGNED_MOBILOGRAPHER_ID!
+          if (v.assigned_mobilographer_id !== mob.id) return false
+          
+          // FAQAT KIRITISHDAN (record_id bor)
+          if (!v.record_id) return false
+          
+          // FAQAT SHU OY
           const videoDate = new Date(v.created_at)
-          if (videoDate.getMonth() !== month || videoDate.getFullYear() !== year) return false
-          return true
-        })
-        
-        // POST MONTAJ (videos'dan)
-        const postCount = completedVideos.filter((v: any) => 
+          return videoDate.getMonth() === month && videoDate.getFullYear() === year
+        }) || []
+
+        // POST MONTAJ (videos'dan) - PROGRESS UCHUN
+        const postCount = mobVideos.filter((v: any) => 
           v.task_type === 'montaj' && 
           v.content_type === 'post' && 
           v.editing_status === 'completed'
         ).length
         
-        // STORIS MONTAJ (videos'dan)
-        const storisCount = completedVideos.filter((v: any) => 
+        // STORIS MONTAJ (videos'dan) - BALL UCHUN
+        const storisCount = mobVideos.filter((v: any) => 
           v.task_type === 'montaj' && 
           v.content_type === 'storis' && 
           v.editing_status === 'completed'
         ).length
         
-        // SYOMKA (videos'dan)
-        const syomkaCount = completedVideos.filter((v: any) => 
+        // SYOMKA (videos'dan) - BALL UCHUN
+        const syomkaCount = mobVideos.filter((v: any) => 
           v.task_type === 'syomka' && 
           v.filming_status === 'completed'
         ).length
 
+        // JAMI BALL
         const totalPoints = postCount + storisCount + syomkaCount
-        const progress = totalTarget > 0 ? Math.round((totalCompleted / totalTarget) * 100) : 0
+
+        // PROGRESS HISOBLASH - SHU MOBILOGRAFNING LOYIHALARIDAGI MAQSADLAR
+        const { data: mobProjects } = supabase
+          .from('projects')
+          .select('monthly_target')
+          .eq('mobilographer_id', mob.id)
+        
+        // Hozircha barcha loyihalar bir xil maqsad deb hisoblaymiz
+        // Kelajakda har bir loyiha alohida bo'lishi mumkin
+        const totalTarget = postCount > 0 ? 12 : 0 // Agar ish qilgan bo'lsa, default maqsad
+        const progress = totalTarget > 0 ? Math.round((postCount / totalTarget) * 100) : 0
+
+        // LOYIHALAR SONI - SHU MOBILOGRAF ISHTIROK ETGAN
+        const uniqueProjects = new Set(mobVideos.map((v: any) => v.projects?.id).filter(Boolean))
+        const projectsCount = uniqueProjects.size
 
         return {
           id: mob.id,
@@ -109,10 +89,10 @@ export default function OylikPage() {
           storisCount,
           syomkaCount,
           totalPoints,
-          totalCompleted,
+          totalCompleted: postCount,
           totalTarget,
           progress,
-          projectsCount: mobProjects.length
+          projectsCount
         }
       }).sort((a, b) => b.totalPoints - a.totalPoints)
 
@@ -189,7 +169,7 @@ export default function OylikPage() {
           
           <div className="text-center">
             <h2 className="text-3xl font-bold text-gray-800">{getMonthName()}</h2>
-            <p className="text-sm text-gray-500 mt-1">Ball: Videos'dan | Progress: Faqat MONTAJ POST</p>
+            <p className="text-sm text-gray-500 mt-1">Ball: Kim ish qildi - o'shaga! | Progress: Faqat MONTAJ POST</p>
           </div>
           
           <button
@@ -209,7 +189,7 @@ export default function OylikPage() {
             <span className="text-lg opacity-90">Post Montaj</span>
           </div>
           <div className="text-5xl font-bold">{totalStats.post}</div>
-          <div className="text-xs opacity-80 mt-1">Videos'dan</div>
+          <div className="text-xs opacity-80 mt-1">Kim ish qildi - o'shaga!</div>
         </div>
 
         <div className="bg-gradient-to-br from-pink-500 to-pink-600 text-white rounded-2xl p-6 shadow-lg">
@@ -218,7 +198,7 @@ export default function OylikPage() {
             <span className="text-lg opacity-90">Storis Montaj</span>
           </div>
           <div className="text-5xl font-bold">{totalStats.storis}</div>
-          <div className="text-xs opacity-80 mt-1">Videos'dan</div>
+          <div className="text-xs opacity-80 mt-1">Kim ish qildi - o'shaga!</div>
         </div>
 
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl p-6 shadow-lg">
@@ -227,7 +207,7 @@ export default function OylikPage() {
             <span className="text-lg opacity-90">Syomka</span>
           </div>
           <div className="text-5xl font-bold">{totalStats.syomka}</div>
-          <div className="text-xs opacity-80 mt-1">Videos'dan</div>
+          <div className="text-xs opacity-80 mt-1">Kim ish qildi - o'shaga!</div>
         </div>
 
         <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-2xl p-6 shadow-lg">
@@ -237,27 +217,6 @@ export default function OylikPage() {
           </div>
           <div className="text-5xl font-bold">{totalStats.totalPoints}</div>
           <div className="text-xs opacity-80 mt-1">Post + Storis + Syomka</div>
-        </div>
-      </div>
-
-      {/* Progress Umumiy */}
-      <div className="card-modern">
-        <h3 className="text-xl font-bold mb-4">📊 Umumiy Progress (Faqat MONTAJ POST)</h3>
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-lg text-gray-700">
-            📄 {totalStats.totalCompleted}/{totalStats.totalTarget} post montaj
-          </span>
-          <span className="text-3xl font-bold text-blue-600">
-            {totalStats.totalTarget > 0 ? Math.round((totalStats.totalCompleted / totalStats.totalTarget) * 100) : 0}%
-          </span>
-        </div>
-        <div className="w-full bg-gray-200 rounded-full h-6">
-          <div
-            className="progress-bar h-6 rounded-full bg-gradient-to-r from-blue-500 to-purple-600"
-            style={{ 
-              width: `${Math.min(totalStats.totalTarget > 0 ? (totalStats.totalCompleted / totalStats.totalTarget) * 100 : 0, 100)}%` 
-            }}
-          />
         </div>
       </div>
 
@@ -281,7 +240,7 @@ export default function OylikPage() {
                     </div>
                     <div>
                       <h3 className="text-2xl font-bold">{mob.name}</h3>
-                      <p className="text-sm opacity-90">{mob.projectsCount} ta loyiha</p>
+                      <p className="text-sm opacity-90">{mob.projectsCount} ta loyihada ishtirok etdi</p>
                     </div>
                   </div>
                   <div className="text-right">
@@ -341,12 +300,12 @@ export default function OylikPage() {
           <div>
             <h3 className="font-bold text-lg mb-2">Eslatma:</h3>
             <ul className="text-sm text-gray-700 space-y-1">
-              <li>✅ <strong>Ball hisob:</strong> Videos jadvalidan - har bir completed video = 1 ball</li>
-              <li>✅ <strong>Post/Storis/Syomka:</strong> Har biri alohida hisoblanadi</li>
-              <li>✅ <strong>Progress:</strong> Faqat MONTAJ POST (Storis va Syomka hisoblanmaydi)</li>
-              <li>✅ <strong>Reyting:</strong> Jami ball bo'yicha (Post + Storis + Syomka)</li>
-              <li>✅ <strong>Faqat kiritish:</strong> REJA progress'ga va ballga kirmaydi</li>
-              <li>✅ <strong>Mobilograflar bilan bir xil:</strong> Endi ikkala sahifada ham bir xil ma'lumot!</li>
+              <li>✅ <strong>Kim ish qildi - o'shaga ball!</strong> (assigned_mobilographer_id)</li>
+              <li>✅ <strong>Dadaxonbekning loyihasida Firdavs ish qilsa:</strong> Ball Firdavs'ga ketadi!</li>
+              <li>✅ <strong>Ball hisob:</strong> Post + Storis + Syomka</li>
+              <li>✅ <strong>Progress:</strong> Faqat MONTAJ POST</li>
+              <li>✅ <strong>Reyting:</strong> Jami ball bo'yicha</li>
+              <li>✅ <strong>Loyihalar soni:</strong> Qaysi loyihalarda ishtirok etgan</li>
             </ul>
           </div>
         </div>
