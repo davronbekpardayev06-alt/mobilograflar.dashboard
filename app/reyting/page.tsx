@@ -20,8 +20,6 @@ export default function ReytingPage() {
 
   useEffect(() => {
     fetchData()
-    
-    // REAL-TIME: Har 10 soniyada yangilanadi
     const interval = setInterval(fetchData, 10000)
     return () => clearInterval(interval)
   }, [filterType, selectedMonth])
@@ -45,18 +43,22 @@ export default function ReytingPage() {
         .select('*')
         .not('record_id', 'is', null)
 
-      console.log('📹 Jami videolar:', allVideos?.length)
+      console.log('📹 JAMI VIDEOLAR:', allVideos?.length)
+      if (allVideos && allVideos.length > 0) {
+        console.log('📹 BIRINCHI VIDEO:', allVideos[0])
+      }
 
-      // Filter by month if needed - RECORD_DATE ISHLATAMIZ!
+      // FILTER - record_date yoki created_at
       let videos = allVideos || []
       if (filterType === 'month') {
         const month = selectedMonth.getMonth() + 1
         const year = selectedMonth.getFullYear()
         videos = videos.filter(v => {
           try {
-            // MUHIM: record_date ishlatamiz!
-            const dateToUse = v.record_date || v.created_at
-            const d = new Date(dateToUse)
+            let dateStr = v.record_date || v.created_at
+            if (!dateStr) return false
+            
+            const d = new Date(dateStr)
             return d.getMonth() + 1 === month && d.getFullYear() === year
           } catch {
             return false
@@ -64,7 +66,7 @@ export default function ReytingPage() {
         })
       }
 
-      console.log('📹 Filterlangan videolar:', videos.length)
+      console.log('📹 FILTERLANGAN VIDEOLAR:', videos.length)
 
       const mobilographersWithStats: MobilographerStat[] = mobilographers.map(mob => {
         const mobVids = videos.filter(v => v.assigned_mobilographer_id === mob.id)
@@ -103,7 +105,7 @@ export default function ReytingPage() {
       setStats(mobilographersWithStats)
       setLoading(false)
     } catch (error) {
-      console.error('Error:', error)
+      console.error('❌ XATO:', error)
       setLoading(false)
     }
   }
@@ -158,12 +160,11 @@ export default function ReytingPage() {
         </button>
       </div>
 
-      {/* Filter */}
       <div className="card-modern">
         <div className="flex items-center gap-4 mb-4">
           <button
             onClick={() => setFilterType('all')}
-            className={`px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105 ${
+            className={`px-6 py-3 rounded-xl font-bold transition-all ${
               filterType === 'all'
                 ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
@@ -173,7 +174,7 @@ export default function ReytingPage() {
           </button>
           <button
             onClick={() => setFilterType('month')}
-            className={`px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105 ${
+            className={`px-6 py-3 rounded-xl font-bold transition-all ${
               filterType === 'month'
                 ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
@@ -184,31 +185,21 @@ export default function ReytingPage() {
         </div>
 
         {filterType === 'month' && (
-          <div className="flex items-center justify-between pt-4 border-t-2 border-gray-200">
-            <button
-              onClick={() => changeMonth(-1)}
-              className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold transition-all transform hover:scale-105"
-            >
+          <div className="flex items-center justify-between pt-4 border-t-2">
+            <button onClick={() => changeMonth(-1)} className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold">
               ← Oldingi
             </button>
-            <h3 className="text-2xl font-bold text-gray-800">{getMonthName()}</h3>
-            <button
-              onClick={() => changeMonth(1)}
-              className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold transition-all transform hover:scale-105"
-            >
+            <h3 className="text-2xl font-bold">{getMonthName()}</h3>
+            <button onClick={() => changeMonth(1)} className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold">
               Keyingi →
             </button>
           </div>
         )}
       </div>
 
-      {/* Rankings */}
       <div className="space-y-4">
         {stats.map((mob, index) => (
-          <div
-            key={mob.id}
-            className={`card-modern ${getRankColor(index)} text-white p-6 transform hover:scale-102 transition-all cursor-pointer`}
-          >
+          <div key={mob.id} className={`card-modern ${getRankColor(index)} text-white p-6`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center text-3xl font-bold">
@@ -217,50 +208,26 @@ export default function ReytingPage() {
                 <div>
                   <h3 className="text-2xl font-bold mb-2">{mob.name}</h3>
                   <div className="flex gap-4 text-sm">
-                    <span className="bg-white bg-opacity-20 px-3 py-1 rounded-lg font-semibold">
-                      📄 Post: <strong>{mob.post}</strong>
-                    </span>
-                    <span className="bg-white bg-opacity-20 px-3 py-1 rounded-lg font-semibold">
-                      📱 Storis: <strong>{mob.storis}</strong>
-                    </span>
-                    <span className="bg-white bg-opacity-20 px-3 py-1 rounded-lg font-semibold">
-                      📹 Syomka: <strong>{mob.syomka}</strong>
-                    </span>
+                    <span className="bg-white bg-opacity-20 px-3 py-1 rounded-lg">📄 Post: {mob.post}</span>
+                    <span className="bg-white bg-opacity-20 px-3 py-1 rounded-lg">📱 Storis: {mob.storis}</span>
+                    <span className="bg-white bg-opacity-20 px-3 py-1 rounded-lg">📹 Syomka: {mob.syomka}</span>
                   </div>
                 </div>
               </div>
               <div className="text-right">
                 <div className="text-6xl font-bold">{mob.totalPoints}</div>
-                <div className="text-sm opacity-90 font-semibold">jami ball</div>
+                <div className="text-sm opacity-90">jami ball</div>
               </div>
             </div>
           </div>
         ))}
 
         {stats.length === 0 && (
-          <div className="card-modern text-center py-12 bg-gray-50">
+          <div className="card-modern text-center py-12">
             <div className="text-6xl mb-4">🏆</div>
-            <p className="text-gray-500 text-lg font-semibold">
-              {filterType === 'month' ? 'Bu oyda hozircha ma\'lumot yo\'q' : 'Hozircha ma\'lumot yo\'q'}
-            </p>
-            <p className="text-sm text-gray-400 mt-2">
-              {filterType === 'month' ? 'Boshqa oyni tanlang' : 'Ishlarni kiriting'}
-            </p>
+            <p className="text-gray-500 text-lg">Hozircha ma'lumot yo'q</p>
           </div>
         )}
-      </div>
-
-      {/* Info */}
-      <div className="card-modern bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-200">
-        <div className="flex items-start gap-3">
-          <span className="text-3xl">✅</span>
-          <div>
-            <h3 className="font-bold text-lg mb-2">Real-time yangilanish!</h3>
-            <p className="text-sm text-gray-700">
-              Ma'lumotlar har 10 soniyada avtomatik yangilanadi. Yangi ish kiritganingizdan keyin 10 soniya ichida ko'rinadi!
-            </p>
-          </div>
-        </div>
       </div>
     </div>
   )
