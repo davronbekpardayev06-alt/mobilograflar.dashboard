@@ -4,55 +4,73 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
 export default function ReytingPage() {
-  const [rankings, setRankings] = useState<any[]>([])
+  const [stats, setStats] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [filterType, setFilterType] = useState<'all' | 'month'>('all')
+  const [selectedMonth, setSelectedMonth] = useState(new Date())
 
   useEffect(() => {
     fetchData()
-  }, [])
+  }, [filterType, selectedMonth])
 
   const fetchData = async () => {
     try {
+      setLoading(true)
+
       const { data: mobilographers } = await supabase
         .from('mobilographers')
         .select('*')
+        .order('name')
 
-      const { data: records } = await supabase
-        .from('records')
+      const { data: allVideos } = await supabase
+        .from('videos')
         .select('*')
+        .not('record_id', 'is', null)
 
-      const rankingsWithScores = mobilographers?.map(m => {
-        const mobilographerRecords = records?.filter(r => 
-          r.mobilographer_id === m.id
-        ) || []
-        
-        let postCount = 0
-        let storisCount = 0
-        let syomkaCount = 0
-        
-        mobilographerRecords.forEach(record => {
-          const count = record.count || 1
-          if (record.type === 'editing') {
-            if (record.content_type === 'post') {
-              postCount += count
-            } else if (record.content_type === 'storis') {
-              storisCount += count
-            }
-          } else if (record.type === 'filming') {
-            syomkaCount += count
-          }
+      // Filter bo'yicha
+      let videos = allVideos || []
+      if (filterType === 'month') {
+        const month = selectedMonth.getMonth() + 1
+        const year = selectedMonth.getFullYear()
+        videos = videos.filter(v => {
+          const d = new Date(v.created_at)
+          return d.getMonth() + 1 === month && d.getFullYear() === year
         })
-        
-        return {
-          ...m,
-          postCount,
-          storisCount,
-          syomkaCount,
-          totalPoints: postCount + storisCount + syomkaCount
-        }
-      }).sort((a, b) => b.totalPoints - a.totalPoints) || []
+      }
 
-      setRankings(rankingsWithScores)
+      const mobilographersWithStats = (mobilographers || []).map(mob => {
+        const mobVids = videos.filter(v => v.assigned_mobilographer_id === mob.id)
+        
+        const post = mobVids.filter(v => 
+          v.task_type === 'montaj' && 
+          v.content_type === 'post' && 
+          v.editing_status === 'completed'
+        ).length
+        
+        const storis = mobVids.filter(v => 
+          v.task_type === 'montaj' && 
+          v.content_type === 'storis' && 
+          v.editing_status === 'completed'
+        ).length
+        
+        const syomka = mobVids.filter(v => 
+          v.task_type === 'syomka' && 
+          v.filming_status === 'completed'
+        ).length
+
+        const totalPoints = post + storis + syomka
+
+        return {
+          id: mob.id,
+          name: mob.name,
+          post,
+          storis,
+          syomka,
+          totalPoints
+        }
+      }).sort((a, b) => b.totalPoints - a.totalPoints)
+
+      setStats(mobilographersWithStats)
       setLoading(false)
     } catch (error) {
       console.error('Error:', error)
@@ -60,25 +78,35 @@ export default function ReytingPage() {
     }
   }
 
-  const getMedalEmoji = (index: number) => {
+  const changeMonth = (dir: number) => {
+    const newDate = new Date(selectedMonth)
+    newDate.setMonth(newDate.getMonth() + dir)
+    setSelectedMonth(newDate)
+  }
+
+  const getMonthName = () => {
+    return selectedMonth.toLocaleDateString('uz-UZ', { month: 'long', year: 'numeric' })
+  }
+
+  const getRankEmoji = (index: number) => {
     if (index === 0) return '🥇'
     if (index === 1) return '🥈'
     if (index === 2) return '🥉'
-    return index + 1
+    return `${index + 1}`
   }
 
-  const getMedalColor = (index: number) => {
-    if (index === 0) return 'from-yellow-400 to-yellow-600'
-    if (index === 1) return 'from-gray-400 to-gray-600'
-    if (index === 2) return 'from-orange-400 to-orange-600'
-    return 'from-blue-400 to-blue-600'
+  const getRankColor = (index: number) => {
+    if (index === 0) return 'bg-gradient-to-br from-yellow-400 to-yellow-600'
+    if (index === 1) return 'bg-gradient-to-br from-gray-400 to-gray-600'
+    if (index === 2) return 'bg-gradient-to-br from-orange-400 to-orange-600'
+    return 'bg-gradient-to-br from-blue-400 to-blue-600'
   }
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <div className="inline-block w-12 h-12 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+          <div className="inline-block w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mb-4"></div>
           <p className="text-xl text-gray-600">Yuklanmoqda...</p>
         </div>
       </div>
@@ -87,84 +115,100 @@ export default function ReytingPage() {
 
   return (
     <div className="space-y-6 animate-slide-in">
-      <h1 className="text-3xl font-bold bg-gradient-to-r from-yellow-600 to-orange-600 bg-clip-text text-transparent">
-        🏆 Reyting Jadvali
-      </h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
+          🏆 Reyting Jadvali
+        </h1>
+      </div>
 
-      <div className="space-y-4">
-        {rankings.map((mobilographer, index) => (
-          <div
-            key={mobilographer.id}
-            className={`card-modern border-2 ${
-              index === 0 ? 'border-yellow-400 bg-gradient-to-r from-yellow-50 to-orange-50' :
-              index === 1 ? 'border-gray-400 bg-gradient-to-r from-gray-50 to-gray-100' :
-              index === 2 ? 'border-orange-400 bg-gradient-to-r from-orange-50 to-red-50' :
-              'border-gray-200'
+      {/* Filter */}
+      <div className="card-modern">
+        <div className="flex items-center gap-4 mb-4">
+          <button
+            onClick={() => setFilterType('all')}
+            className={`px-6 py-3 rounded-xl font-bold transition ${
+              filterType === 'all'
+                ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
             }`}
           >
-            <div className="flex items-center gap-4">
-              {/* Medal/Rank */}
-              <div className={`w-16 h-16 bg-gradient-to-br ${getMedalColor(index)} rounded-full flex items-center justify-center text-white shadow-lg flex-shrink-0`}>
-                <span className="text-3xl font-bold">
-                  {typeof getMedalEmoji(index) === 'string' ? getMedalEmoji(index) : getMedalEmoji(index)}
-                </span>
-              </div>
+            📊 Barcha Vaqt
+          </button>
+          <button
+            onClick={() => setFilterType('month')}
+            className={`px-6 py-3 rounded-xl font-bold transition ${
+              filterType === 'month'
+                ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            📅 Oylik
+          </button>
+        </div>
 
-              {/* Mobilograf info */}
-              <div className="flex-1">
-                <h3 className="text-2xl font-bold mb-2">{mobilographer.name}</h3>
-                <div className="flex items-center gap-4 text-sm flex-wrap">
-                  <span className="flex items-center gap-1">
-                    <span className="text-lg">📄</span>
-                    <span className="font-semibold">Post:</span>
-                    <span className="text-green-600 font-bold">{mobilographer.postCount}</span>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="text-lg">📱</span>
-                    <span className="font-semibold">Storis:</span>
-                    <span className="text-pink-600 font-bold">{mobilographer.storisCount}</span>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="text-lg">📹</span>
-                    <span className="font-semibold">Syomka:</span>
-                    <span className="text-blue-600 font-bold">{mobilographer.syomkaCount}</span>
-                  </span>
+        {filterType === 'month' && (
+          <div className="flex items-center justify-between pt-4 border-t-2">
+            <button
+              onClick={() => changeMonth(-1)}
+              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold transition"
+            >
+              ← Oldingi
+            </button>
+            <h3 className="text-2xl font-bold">{getMonthName()}</h3>
+            <button
+              onClick={() => changeMonth(1)}
+              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold transition"
+            >
+              Keyingi →
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Reyting */}
+      <div className="space-y-4">
+        {stats.map((mob, index) => (
+          <div
+            key={mob.id}
+            className={`card-modern ${getRankColor(index)} text-white p-6 hover:scale-105 transition-transform`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center text-3xl font-bold">
+                  {getRankEmoji(index)}
                 </div>
-              </div>
-
-              {/* Total score */}
-              <div className="text-right">
-                <div className="text-sm text-gray-600 mb-1">JAMI</div>
-                <div className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-                  {mobilographer.totalPoints}
-                </div>
-                <div className="text-xs text-gray-500">ball</div>
-              </div>
-
-              {/* Progress indicator */}
-              {mobilographer.totalPoints > 0 && rankings[0]?.totalPoints > 0 && (
-                <div className="w-20">
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className="progress-bar h-2 rounded-full bg-gradient-to-r from-purple-500 to-blue-500"
-                      style={{
-                        width: `${Math.min((mobilographer.totalPoints / rankings[0].totalPoints) * 100, 100)}%`
-                      }}
-                    />
+                <div>
+                  <h3 className="text-2xl font-bold mb-2">{mob.name}</h3>
+                  <div className="flex gap-4 text-sm">
+                    <span className="bg-white bg-opacity-20 px-3 py-1 rounded-lg">
+                      📄 Post: <strong>{mob.post}</strong>
+                    </span>
+                    <span className="bg-white bg-opacity-20 px-3 py-1 rounded-lg">
+                      📱 Storis: <strong>{mob.storis}</strong>
+                    </span>
+                    <span className="bg-white bg-opacity-20 px-3 py-1 rounded-lg">
+                      📹 Syomka: <strong>{mob.syomka}</strong>
+                    </span>
                   </div>
                 </div>
-              )}
+              </div>
+              <div className="text-right">
+                <div className="text-6xl font-bold">{mob.totalPoints}</div>
+                <div className="text-sm opacity-90">jami ball</div>
+              </div>
             </div>
           </div>
         ))}
-      </div>
 
-      {rankings.length === 0 && (
-        <div className="text-center py-12">
-          <div className="text-6xl mb-4">🏆</div>
-          <p className="text-gray-500 text-lg">Hozircha reyting ma'lumotlari yo'q</p>
-        </div>
-      )}
+        {stats.length === 0 && (
+          <div className="card-modern text-center py-12">
+            <div className="text-6xl mb-4">🏆</div>
+            <p className="text-gray-500 text-lg">
+              {filterType === 'month' ? 'Bu oyda hozircha ma\'lumot yo\'q' : 'Hozircha ma\'lumot yo\'q'}
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
