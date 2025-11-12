@@ -15,10 +15,8 @@ export default function OylikPage() {
   const fetchData = async () => {
     setLoading(true)
     
-    const month = selectedMonth.getMonth()
+    const month = selectedMonth.getMonth() + 1 // 1-12
     const year = selectedMonth.getFullYear()
-    const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`
-    const endDate = `${year}-${String(month + 1).padStart(2, '0')}-31`
 
     // Mobilograflar
     const { data: mobilographers } = await supabase
@@ -31,17 +29,25 @@ export default function OylikPage() {
       .from('projects')
       .select('*')
 
-    // Videolar
+    // Videolar - SQL EXTRACT ishlatamiz!
     const { data: videos } = await supabase
       .from('videos')
       .select('*')
       .not('record_id', 'is', null)
-      .gte('created_at', startDate)
-      .lte('created_at', endDate)
+
+    // JavaScript'da filter qilamiz (SQL EXTRACT ishlamasa)
+    const filteredVideos = (videos || []).filter((v: any) => {
+      const vDate = new Date(v.created_at)
+      return vDate.getMonth() + 1 === month && vDate.getFullYear() === year
+    })
+
+    console.log(`📅 Tanlangan: ${month}/${year}`)
+    console.log(`📹 Jami videolar:`, videos?.length)
+    console.log(`📹 Bu oydagi videolar:`, filteredVideos.length)
 
     // Statistika
     const result = (mobilographers || []).map(mob => {
-      const mobVids = (videos || []).filter((v: any) => v.assigned_mobilographer_id === mob.id)
+      const mobVids = filteredVideos.filter((v: any) => v.assigned_mobilographer_id === mob.id)
       
       const post = mobVids.filter((v: any) => 
         v.task_type === 'montaj' && v.content_type === 'post' && v.editing_status === 'completed'
@@ -54,6 +60,8 @@ export default function OylikPage() {
       const syomka = mobVids.filter((v: any) => 
         v.task_type === 'syomka' && v.filming_status === 'completed'
       ).length
+
+      console.log(`👤 ${mob.name}: Post=${post}, Storis=${storis}, Syomka=${syomka}`)
 
       const mobProjects = (projects || []).filter((p: any) => p.mobilographer_id === mob.id)
       const target = mobProjects.reduce((sum: number, p: any) => sum + (p.monthly_target || 0), 0)
