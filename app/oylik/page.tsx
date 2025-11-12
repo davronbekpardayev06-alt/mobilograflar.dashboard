@@ -7,6 +7,7 @@ export default function OylikPage() {
   const [stats, setStats] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedMonth, setSelectedMonth] = useState(new Date())
+  const [allProjects, setAllProjects] = useState<any[]>([])
 
   useEffect(() => {
     fetchData()
@@ -24,40 +25,43 @@ export default function OylikPage() {
         .select('*')
         .order('name')
 
-      // 2. Barcha videolarni olish (SHU OY)
+      // 2. Barcha loyihalarni olish (HAR BIRINING O'Z MAQSADI BILAN)
+      const { data: projects } = await supabase
+        .from('projects')
+        .select('*')
+
+      setAllProjects(projects || [])
+
+      // 3. Barcha videolarni olish (SHU OY, FAQAT KIRITILGAN)
       const { data: allVideos } = await supabase
         .from('videos')
         .select('*')
-        .not('record_id', 'is', null) // Faqat kiritilgan ishlar
+        .not('record_id', 'is', null) // Faqat kiritilgan ishlar (reja emas!)
         .gte('created_at', `${year}-${String(month + 1).padStart(2, '0')}-01`)
         .lte('created_at', `${year}-${String(month + 1).padStart(2, '0')}-31`)
 
-      console.log('📹 BARCHA VIDEOLAR:', allVideos?.length)
-
-      // 3. Har bir mobilograf uchun statistika
+      // 4. Har bir mobilograf uchun statistika
       const mobilographersWithStats = mobilographers?.map(mob => {
-        // SHU MOBILOGRAF ISHTIROK ETGAN VIDEOLAR
+        // SHU MOBILOGRAF QILGAN BARCHA ISHLAR (assigned_mobilographer_id)
         const mobVideos = allVideos?.filter((v: any) => 
           v.assigned_mobilographer_id === mob.id
         ) || []
 
-        console.log(`👤 ${mob.name} - ${mobVideos.length} ta video`)
-
-        // POST MONTAJ
+        // POST MONTAJ (progress uchun)
         const postVideos = mobVideos.filter((v: any) => 
           v.task_type === 'montaj' && 
           v.content_type === 'post' && 
           v.editing_status === 'completed'
         )
         
-        // STORIS MONTAJ
+        // STORIS MONTAJ (ball uchun)
         const storisVideos = mobVideos.filter((v: any) => 
           v.task_type === 'montaj' && 
           v.content_type === 'storis' && 
           v.editing_status === 'completed'
         )
         
-        // SYOMKA
+        // SYOMKA (ball uchun)
         const syomkaVideos = mobVideos.filter((v: any) => 
           v.task_type === 'syomka' && 
           v.filming_status === 'completed'
@@ -68,14 +72,16 @@ export default function OylikPage() {
         const syomkaCount = syomkaVideos.length
         const totalPoints = postCount + storisCount + syomkaCount
 
-        console.log(`${mob.name}: Post=${postCount}, Storis=${storisCount}, Syomka=${syomkaCount}, Total=${totalPoints}`)
-
-        // LOYIHALAR SONI
+        // LOYIHALAR SONI - qaysi loyihalarda ishtirok etgan
         const projectIds = new Set(mobVideos.map((v: any) => v.project_id).filter(Boolean))
         const projectsCount = projectIds.size
 
-        // PROGRESS - default 12 ta
-        const totalTarget = postCount > 0 ? 12 : 0
+        // SHU MOBILOGRAFNING BARCHA LOYIHALARINING MAQSADLARI
+        // Har bir loyihaning o'z maqsadi qo'shiladi (6, 8, 12, va h.k.)
+        const mobProjects = projects?.filter(p => p.mobilographer_id === mob.id) || []
+        const totalTarget = mobProjects.reduce((sum, p) => sum + (p.monthly_target || 0), 0)
+        
+        // PROGRESS HISOBLASH
         const progress = totalTarget > 0 ? Math.round((postCount / totalTarget) * 100) : 0
 
         return {
@@ -90,9 +96,7 @@ export default function OylikPage() {
           progress,
           projectsCount
         }
-      }).sort((a, b) => b.totalPoints - a.totalPoints)
-
-      console.log('📊 FINAL STATS:', mobilographersWithStats)
+      }).sort((a, b) => b.totalPoints - a.totalPoints) // Ball bo'yicha reyting
 
       setStats(mobilographersWithStats || [])
       setLoading(false)
@@ -155,7 +159,7 @@ export default function OylikPage() {
         </h1>
         <button
           onClick={fetchData}
-          className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold"
+          className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold transition"
         >
           🔄 Yangilash
         </button>
@@ -193,7 +197,7 @@ export default function OylikPage() {
             <span className="text-lg opacity-90">Post Montaj</span>
           </div>
           <div className="text-5xl font-bold">{totalStats.post}</div>
-          <div className="text-xs opacity-80 mt-1">assigned_mobilographer_id</div>
+          <div className="text-xs opacity-80 mt-1">Videos'dan</div>
         </div>
 
         <div className="bg-gradient-to-br from-pink-500 to-pink-600 text-white rounded-2xl p-6 shadow-lg">
@@ -202,7 +206,7 @@ export default function OylikPage() {
             <span className="text-lg opacity-90">Storis Montaj</span>
           </div>
           <div className="text-5xl font-bold">{totalStats.storis}</div>
-          <div className="text-xs opacity-80 mt-1">assigned_mobilographer_id</div>
+          <div className="text-xs opacity-80 mt-1">Videos'dan</div>
         </div>
 
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl p-6 shadow-lg">
@@ -211,7 +215,7 @@ export default function OylikPage() {
             <span className="text-lg opacity-90">Syomka</span>
           </div>
           <div className="text-5xl font-bold">{totalStats.syomka}</div>
-          <div className="text-xs opacity-80 mt-1">assigned_mobilographer_id</div>
+          <div className="text-xs opacity-80 mt-1">Videos'dan</div>
         </div>
 
         <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-2xl p-6 shadow-lg">
@@ -222,6 +226,30 @@ export default function OylikPage() {
           <div className="text-5xl font-bold">{totalStats.totalPoints}</div>
           <div className="text-xs opacity-80 mt-1">Post + Storis + Syomka</div>
         </div>
+      </div>
+
+      {/* Progress Umumiy */}
+      <div className="card-modern">
+        <h3 className="text-xl font-bold mb-4">📊 Umumiy Progress (Faqat MONTAJ POST)</h3>
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-lg text-gray-700">
+            📄 {totalStats.totalCompleted}/{totalStats.totalTarget} post montaj
+          </span>
+          <span className="text-3xl font-bold text-blue-600">
+            {totalStats.totalTarget > 0 ? Math.round((totalStats.totalCompleted / totalStats.totalTarget) * 100) : 0}%
+          </span>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-6">
+          <div
+            className="progress-bar h-6 rounded-full bg-gradient-to-r from-blue-500 to-purple-600"
+            style={{ 
+              width: `${Math.min(totalStats.totalTarget > 0 ? (totalStats.totalCompleted / totalStats.totalTarget) * 100 : 0, 100)}%` 
+            }}
+          />
+        </div>
+        <p className="text-sm text-gray-500 mt-2">
+          {allProjects.length} ta loyiha - har birining o'z maqsadi qo'shildi
+        </p>
       </div>
 
       {/* Mobilograflar Reytingi */}
@@ -273,7 +301,7 @@ export default function OylikPage() {
                   <div className="bg-white bg-opacity-20 rounded-xl p-4">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-semibold">
-                        📊 Progress (Faqat POST)
+                        📊 Progress (Barcha loyihalar maqsadi)
                       </span>
                       <span className="text-2xl font-bold">{mob.progress}%</span>
                     </div>
@@ -284,7 +312,7 @@ export default function OylikPage() {
                       />
                     </div>
                     <div className="text-xs opacity-90">
-                      {mob.totalCompleted}/{mob.totalTarget} post
+                      {mob.totalCompleted}/{mob.totalTarget} post montaj
                     </div>
                   </div>
                 )}
@@ -306,11 +334,12 @@ export default function OylikPage() {
           <div>
             <h3 className="font-bold text-lg mb-2">Muhim ma'lumot:</h3>
             <ul className="text-sm text-gray-700 space-y-1">
-              <li>✅ <strong>KIM ISH QILDI - O'SHAGA BALL!</strong></li>
-              <li>✅ Dadaxonbekning loyihasida Firdavs ish qilsa → Ball Firdavs'ga</li>
-              <li>✅ Console'da loglarni ko'ring (F12 → Console)</li>
-              <li>✅ "🔄 Yangilash" tugmasini bosing agar tuzatish kerak bo'lsa</li>
-              <li>✅ Browser Console: `📹 BARCHA VIDEOLAR`, `👤 Ismi - N ta video`</li>
+              <li>✅ <strong>Kim ish qildi - o'shaga ball!</strong> (assigned_mobilographer_id)</li>
+              <li>✅ <strong>Progress:</strong> Har bir loyihaning o'z maqsadi qo'shiladi</li>
+              <li>✅ <strong>Misol:</strong> 3 ta loyiha (6 + 8 + 12) = 26 ta maqsad</li>
+              <li>✅ <strong>Ball hisob:</strong> Post + Storis + Syomka</li>
+              <li>✅ <strong>Reyting:</strong> Jami ball bo'yicha (yuqoridan pastga)</li>
+              <li>✅ <strong>Dadaxonbekning loyihasida Firdavs ish qilsa:</strong> Ball Firdavs'ga!</li>
             </ul>
           </div>
         </div>
@@ -318,3 +347,8 @@ export default function OylikPage() {
     </div>
   )
 }
+```
+
+**Commit message:**  
+```
+Fix oylik - final: correct assigned_mobilographer_id + sum all project targets (6, 8, 12, etc)
