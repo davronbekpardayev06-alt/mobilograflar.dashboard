@@ -20,6 +20,10 @@ export default function ReytingPage() {
 
   useEffect(() => {
     fetchData()
+    
+    // REAL-TIME: Har 10 soniyada yangilanadi
+    const interval = setInterval(fetchData, 10000)
+    return () => clearInterval(interval)
   }, [filterType, selectedMonth])
 
   const fetchData = async () => {
@@ -41,20 +45,26 @@ export default function ReytingPage() {
         .select('*')
         .not('record_id', 'is', null)
 
-      // Filter by month if needed
+      console.log('📹 Jami videolar:', allVideos?.length)
+
+      // Filter by month if needed - RECORD_DATE ISHLATAMIZ!
       let videos = allVideos || []
       if (filterType === 'month') {
         const month = selectedMonth.getMonth() + 1
         const year = selectedMonth.getFullYear()
         videos = videos.filter(v => {
           try {
-            const d = new Date(v.created_at)
+            // MUHIM: record_date ishlatamiz!
+            const dateToUse = v.record_date || v.created_at
+            const d = new Date(dateToUse)
             return d.getMonth() + 1 === month && d.getFullYear() === year
           } catch {
             return false
           }
         })
       }
+
+      console.log('📹 Filterlangan videolar:', videos.length)
 
       const mobilographersWithStats: MobilographerStat[] = mobilographers.map(mob => {
         const mobVids = videos.filter(v => v.assigned_mobilographer_id === mob.id)
@@ -75,6 +85,8 @@ export default function ReytingPage() {
           v.task_type === 'syomka' && 
           v.filming_status === 'completed'
         ).length
+
+        console.log(`👤 ${mob.name}: Post=${post}, Storis=${storis}, Syomka=${syomka}, Total=${post + storis + syomka}`)
 
         return {
           id: mob.id,
@@ -138,6 +150,12 @@ export default function ReytingPage() {
         <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
           🏆 Reyting Jadvali
         </h1>
+        <button
+          onClick={fetchData}
+          className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-semibold transition-all transform hover:scale-105"
+        >
+          🔄 Yangilash
+        </button>
       </div>
 
       {/* Filter */}
@@ -231,16 +249,19 @@ export default function ReytingPage() {
           </div>
         )}
       </div>
+
+      {/* Info */}
+      <div className="card-modern bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-200">
+        <div className="flex items-start gap-3">
+          <span className="text-3xl">✅</span>
+          <div>
+            <h3 className="font-bold text-lg mb-2">Real-time yangilanish!</h3>
+            <p className="text-sm text-gray-700">
+              Ma'lumotlar har 10 soniyada avtomatik yangilanadi. Yangi ish kiritganingizdan keyin 10 soniya ichida ko'rinadi!
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
-```
-
----
-
-## ✅ COMMIT QILING:
-
-**2 ta commit:**
-```
-1. Complete rewrite oylik page - clean working code
-2. Complete rewrite reyting page - with month filter
