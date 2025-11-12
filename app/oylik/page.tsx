@@ -21,6 +21,10 @@ export default function OylikPage() {
 
   useEffect(() => {
     fetchData()
+    
+    // REAL-TIME: Har 10 soniyada yangilanadi
+    const interval = setInterval(fetchData, 10000)
+    return () => clearInterval(interval)
   }, [selectedMonth])
 
   const fetchData = async () => {
@@ -29,6 +33,8 @@ export default function OylikPage() {
       
       const month = selectedMonth.getMonth() + 1 // 1-12
       const year = selectedMonth.getFullYear()
+
+      console.log('📅 Tanlangan:', month, '/', year)
 
       // 1. Mobilograflar
       const { data: mobilographers } = await supabase
@@ -46,55 +52,58 @@ export default function OylikPage() {
         .from('projects')
         .select('*')
 
-      // 3. BARCHA videolar (filter yo'q)
+      // 3. BARCHA videolar
       const { data: allVideos } = await supabase
         .from('videos')
         .select('*')
         .not('record_id', 'is', null)
 
-      // 4. JavaScript'da oy bo'yicha filter
+      console.log('📹 Jami videolar:', allVideos?.length)
+
+      // 4. OY BO'YICHA FILTER - RECORD_DATE ISHLATAMIZ!
       const filteredVideos = (allVideos || []).filter(video => {
         try {
-          const videoDate = new Date(video.created_at)
+          // MUHIM: record_date ishlatamiz!
+          const dateToUse = video.record_date || video.created_at
+          const videoDate = new Date(dateToUse)
           const videoMonth = videoDate.getMonth() + 1
           const videoYear = videoDate.getFullYear()
+          
           return videoMonth === month && videoYear === year
-        } catch {
+        } catch (e) {
+          console.error('Date parse error:', e)
           return false
         }
       })
 
+      console.log('📹 Bu oydagi videolar:', filteredVideos.length)
+
       // 5. Har bir mobilograf uchun statistika
       const mobilographersWithStats: MobilographerStat[] = mobilographers.map(mob => {
-        // Bu mobilograf bajargan ishlar
         const mobVideos = filteredVideos.filter(v => v.assigned_mobilographer_id === mob.id)
 
-        // Post montaj
         const postCount = mobVideos.filter(v => 
           v.task_type === 'montaj' && 
           v.content_type === 'post' && 
           v.editing_status === 'completed'
         ).length
 
-        // Storis montaj
         const storisCount = mobVideos.filter(v => 
           v.task_type === 'montaj' && 
           v.content_type === 'storis' && 
           v.editing_status === 'completed'
         ).length
 
-        // Syomka
         const syomkaCount = mobVideos.filter(v => 
           v.task_type === 'syomka' && 
           v.filming_status === 'completed'
         ).length
 
-        // Bu mobilografning barcha loyihalarining maqsadlari
         const mobProjects = (projects || []).filter(p => p.mobilographer_id === mob.id)
         const totalTarget = mobProjects.reduce((sum, p) => sum + (p.monthly_target || 0), 0)
-        
-        // Progress
         const progress = totalTarget > 0 ? Math.round((postCount / totalTarget) * 100) : 0
+
+        console.log(`👤 ${mob.name}: Post=${postCount}, Storis=${storisCount}, Syomka=${syomkaCount}, Total=${postCount + storisCount + syomkaCount}`)
 
         return {
           id: mob.id,
@@ -108,7 +117,6 @@ export default function OylikPage() {
         }
       })
 
-      // Ball bo'yicha saralash
       mobilographersWithStats.sort((a, b) => b.total - a.total)
 
       setStats(mobilographersWithStats)
@@ -175,6 +183,12 @@ export default function OylikPage() {
         <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
           📊 Oylik Hisobot
         </h1>
+        <button
+          onClick={fetchData}
+          className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-semibold transition-all transform hover:scale-105"
+        >
+          🔄 Yangilash
+        </button>
       </div>
 
       {/* Month Selector */}
@@ -331,7 +345,7 @@ export default function OylikPage() {
           <div className="text-center py-12 bg-gray-50 rounded-xl">
             <div className="text-6xl mb-4">📊</div>
             <p className="text-gray-500 text-lg">Bu oyda hozircha ma'lumot yo'q</p>
-            <p className="text-sm text-gray-400 mt-2">Boshqa oyni tanlang</p>
+            <p className="text-sm text-gray-400 mt-2">Boshqa oyni tanlang yoki yangi ish kiriting</p>
           </div>
         )}
       </div>
@@ -344,6 +358,7 @@ export default function OylikPage() {
             <h3 className="font-bold text-lg mb-2">Muhim ma'lumot:</h3>
             <ul className="text-sm text-gray-700 space-y-1">
               <li>✅ <strong>Kim ish qildi - o'shaga ball!</strong></li>
+              <li>✅ Ma'lumotlar har 10 soniyada avtomatik yangilanadi</li>
               <li>✅ Har bir mobilografning o'z loyihalarining maqsadlari hisoblanadi</li>
               <li>✅ Ball = Post montaj + Storis montaj + Syomka</li>
               <li>✅ Progress = Faqat post montaj (loyihalar maqsadiga nisbatan)</li>
