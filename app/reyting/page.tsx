@@ -51,8 +51,19 @@ export default function ReytingPage() {
           .eq('mobilographer_id', mob.id)
 
         if (filterType === 'month') {
-          const startOfMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1)
-          const endOfMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0)
+          const startOfMonth = new Date(
+            selectedMonth.getFullYear(),
+            selectedMonth.getMonth(),
+            1
+          )
+          const endOfMonth = new Date(
+            selectedMonth.getFullYear(),
+            selectedMonth.getMonth() + 1,
+            0,
+            23,
+            59,
+            59
+          )
           query = query
             .gte('date', startOfMonth.toISOString())
             .lte('date', endOfMonth.toISOString())
@@ -72,9 +83,18 @@ export default function ReytingPage() {
           }
         }
 
-        const posti = entries?.filter(e => e.type === 'montaj' && e.content_type === 'post').length || 0
-        const storiki = entries?.filter(e => e.type === 'montaj' && e.content_type === 'story').length || 0
-        const syomka = entries?.filter(e => e.type === 'syomka').length || 0
+        const posti = entries?.filter(
+          (e) => e.type === 'montaj' && e.content_type === 'post'
+        ).length || 0
+        
+        const storiki = entries?.filter(
+          (e) => e.type === 'montaj' && e.content_type === 'story'
+        ).length || 0
+        
+        const syomka = entries?.filter(
+          (e) => e.type === 'syomka'
+        ).length || 0
+        
         const totalPoints = posti + (storiki * 0.5) + syomka
 
         return {
@@ -99,8 +119,18 @@ export default function ReytingPage() {
 
   const getMonthName = (date: Date) => {
     const months = [
-      'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun',
-      'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'
+      'Yanvar',
+      'Fevral',
+      'Mart',
+      'Aprel',
+      'May',
+      'Iyun',
+      'Iyul',
+      'Avgust',
+      'Sentabr',
+      'Oktabr',
+      'Noyabr',
+      'Dekabr'
     ]
     return months[date.getMonth()]
   }
@@ -120,7 +150,7 @@ export default function ReytingPage() {
   }
 
   const changeMonth = (direction: 'prev' | 'next') => {
-    setSelectedMonth(prev => {
+    setSelectedMonth((prev) => {
       const newDate = new Date(prev)
       if (direction === 'prev') {
         newDate.setMonth(newDate.getMonth() - 1)
@@ -146,20 +176,20 @@ export default function ReytingPage() {
       <div className="mb-6 flex gap-4 items-center justify-center">
         <button
           onClick={() => setFilterType('all')}
-          className={`px-4 py-2 rounded-lg ${
-            filterType === 'all' 
-              ? 'bg-blue-500 text-white' 
-              : 'bg-gray-800 text-gray-400'
+          className={`px-4 py-2 rounded-lg transition-colors ${
+            filterType === 'all'
+              ? 'bg-blue-500 text-white'
+              : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
           }`}
         >
           Umumiy
         </button>
         <button
           onClick={() => setFilterType('month')}
-          className={`px-4 py-2 rounded-lg ${
-            filterType === 'month' 
-              ? 'bg-blue-500 text-white' 
-              : 'bg-gray-800 text-gray-400'
+          className={`px-4 py-2 rounded-lg transition-colors ${
+            filterType === 'month'
+              ? 'bg-blue-500 text-white'
+              : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
           }`}
         >
           Oylik
@@ -170,7 +200,7 @@ export default function ReytingPage() {
         <div className="mb-6 flex items-center justify-center gap-4">
           <button
             onClick={() => changeMonth('prev')}
-            className="px-4 py-2 bg-gray-800 rounded-lg hover:bg-gray-700"
+            className="px-4 py-2 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors"
           >
             ←
           </button>
@@ -179,7 +209,7 @@ export default function ReytingPage() {
           </span>
           <button
             onClick={() => changeMonth('next')}
-            className="px-4 py-2 bg-gray-800 rounded-lg hover:bg-gray-700"
+            className="px-4 py-2 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors"
           >
             →
           </button>
@@ -190,7 +220,9 @@ export default function ReytingPage() {
         {stats.map((stat, index) => (
           <div
             key={stat.id}
-            className={`p-4 rounded-lg border-2 ${getRankColor(index)} transition-all hover:scale-[1.02]`}
+            className={`p-4 rounded-lg border-2 ${getRankColor(
+              index
+            )} transition-all hover:scale-[1.02]`}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
