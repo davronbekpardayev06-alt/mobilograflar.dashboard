@@ -33,88 +33,98 @@ export default function OylikPage() {
   const fetchData = async () => {
     try {
       setLoading(true)
-      
+
       const month = selectedMonth.getMonth() + 1
       const year = selectedMonth.getFullYear()
+      const daysInMonth = new Date(year, month, 0).getDate()
+      const today = new Date()
+      const currentDay = today.getDate()
+      const currentMonth = today.getMonth() + 1
+      const currentYear = today.getFullYear()
 
-      console.log('📅 Tanlangan oy:', month, '/', year)
+      let remainingDays = 0
+      if (month === currentMonth && year === currentYear) {
+        remainingDays = daysInMonth - currentDay
+      }
 
-      // Loyihalar va mobilograflar
-      const { data: projectsData } = await supabase
+      const startOfMonth = new Date(year, month - 1, 1)
+      const endOfMonth = new Date(year, month, 0, 23, 59, 59)
+
+      const { data: projectsData, error: projectsError } = await supabase
         .from('projects')
-        .select(`
-          *,
-          mobilographers (
-            name
-          )
-        `)
+        .select('*')
         .order('name')
+
+      if (projectsError) {
+        console.error('Error fetching projects:', projectsError)
+        setLoading(false)
+        return
+      }
 
       if (!projectsData) {
         setLoading(false)
         return
       }
 
-      // Barcha videolar (bu oy)
-      const { data: allVideos } = await supabase
-        .from('videos')
-        .select('*')
-        .not('record_id', 'is', null)
+      const progressPromises = projectsData.map(async (project) => {
+        const { data: assignments, error: assignmentsError } = await supabase
+          .from('project_assignments')
+          .select('mobilographer_id')
+          .eq('project_id', project.id)
 
-      console.log('📹 Jami videolar:', allVideos?.length)
-
-      // Oy bo'yicha filter
-      const filteredVideos = (allVideos || []).filter(video => {
-        try {
-          if (!video.record_date) return false
-          const videoDate = new Date(video.record_date)
-          return videoDate.getMonth() + 1 === month && videoDate.getFullYear() === year
-        } catch {
-          return false
+        if (assignmentsError) {
+          console.error('Error fetching assignments:', assignmentsError)
         }
-      })
 
-      console.log(`📹 Bu oydagi videolar: ${filteredVideos.length}`)
+        const mobilographerIds = assignments?.map(a => a.mobilographer_id) || []
 
-      // Qolgan kunlar
-      const today = new Date()
-      const lastDayOfMonth = new Date(year, month, 0)
-      const remainingDays = Math.max(0, Math.ceil((lastDayOfMonth.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)))
+        let mobilographerNames: string[] = []
+        if (mobilographerIds.length > 0) {
+          const { data: mobilographers, error: mobError } = await supabase
+            .from('mobilographers')
+            .select('name')
+            .in('id', mobilographerIds)
 
-      // Har bir loyiha uchun progress
-      const projectsWithProgress: ProjectProgress[] = projectsData.map(project => {
-        // Bu loyihaning bu oydagi completed post montaj videolari
-        const completed = filteredVideos.filter(v => 
-          v.project_id === project.id &&
-          v.task_type === 'montaj' &&
-          v.content_type === 'post' &&
-          v.editing_status === 'completed'
-        ).length
+          if (mobError) {
+            console.error('Error fetching mobilographers:', mobError)
+          } else {
+            mobilographerNames = mobilographers?.map(m => m.name) || []
+          }
+        }
 
-        const target = project.monthly_target || 0
-        const progress = target > 0 ? Math.round((completed / target) * 100) : 0
+        const { data: workEntries, error: entriesError } = await supabase
+          .from('work_entries')
+          .select('*')
+          .eq('project_id', project.id)
+          .eq('type', 'montaj')
+          .eq('content_type', 'post')
+          .gte('date', startOfMonth.toISOString())
+          .lte('date', endOfMonth.toISOString())
 
-        // Status
+        if (entriesError) {
+          console.error('Error fetching work entries:', entriesError)
+        }
+
+        const completed = workEntries?.length || 0
+        const progress = project.monthly_target > 0 
+          ? Math.round((completed / project.monthly_target) * 100) 
+          : 0
+
         let status: 'ahead' | 'on-track' | 'behind' = 'on-track'
-        if (remainingDays > 0) {
-          const daysInMonth = new Date(year, month, 0).getDate()
-          const daysPassed = daysInMonth - remainingDays
-          const expectedProgress = (daysPassed / daysInMonth) * 100
-          
-          if (progress > expectedProgress + 10) {
+        if (month === currentMonth && year === currentYear) {
+          const expectedProgress = (currentDay / daysInMonth) * project.monthly_target
+          if (completed > expectedProgress * 1.1) {
             status = 'ahead'
-          } else if (progress < expectedProgress - 10) {
+          } else if (completed < expectedProgress * 0.8) {
             status = 'behind'
           }
         }
 
-        console.log(`📊 ${project.name}: Completed=${completed}, Target=${target}, Progress=${progress}%`)
-
         return {
           id: project.id,
           name: project.name,
-          mobilographer: project.mobilographers?.name || 'Tayinlanmagan',
-          target,
+          mobilographer: mobilographerNames.join(', ') || 'Tayinlanmagan',
+          target: project.monthly_target,
           completed,
           progress,
           remainingDays,
@@ -122,220 +132,186 @@ export default function OylikPage() {
         }
       })
 
-      // Sort by progress (highest first)
-      projectsWithProgress.sort((a, b) => b.progress - a.progress)
+      const calculatedProjects = await Promise.all(progressPromises)
+      setProjects(calculatedProjects)
 
-      // Umumiy statistika
-      const totalTarget = projectsWithProgress.reduce((sum, p) => sum + p.target, 0)
-      const totalCompleted = projectsWithProgress.reduce((sum, p) => sum + p.completed, 0)
-      const totalProgress = totalTarget > 0 ? Math.round((totalCompleted / totalTarget) * 100) : 0
+      const totalTarget = calculatedProjects.reduce((sum, p) => sum + p.target, 0)
+      const totalCompleted = calculatedProjects.reduce((sum, p) => sum + p.completed, 0)
+      const totalProgress = totalTarget > 0 
+        ? Math.round((totalCompleted / totalTarget) * 100) 
+        : 0
 
-      setProjects(projectsWithProgress)
-      setTotalStats({ totalTarget, totalCompleted, totalProgress })
-      setLoading(false)
+      setTotalStats({
+        totalTarget,
+        totalCompleted,
+        totalProgress
+      })
     } catch (error) {
-      console.error('❌ XATO:', error)
+      console.error('Unexpected error:', error)
+    } finally {
       setLoading(false)
     }
   }
 
-  const changeMonth = (direction: number) => {
-    const newDate = new Date(selectedMonth)
-    newDate.setMonth(newDate.getMonth() + direction)
-    setSelectedMonth(newDate)
+  const getMonthName = (date: Date) => {
+    const months = [
+      'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun',
+      'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'
+    ]
+    return months[date.getMonth()]
   }
 
-  const getMonthName = () => {
-    return selectedMonth.toLocaleDateString('uz-UZ', { month: 'long', year: 'numeric' })
+  const changeMonth = (direction: 'prev' | 'next') => {
+    setSelectedMonth(prev => {
+      const newDate = new Date(prev)
+      if (direction === 'prev') {
+        newDate.setMonth(newDate.getMonth() - 1)
+      } else {
+        newDate.setMonth(newDate.getMonth() + 1)
+      }
+      return newDate
+    })
   }
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'ahead': return 'from-green-500 to-green-600'
-      case 'on-track': return 'from-blue-500 to-blue-600'
-      case 'behind': return 'from-red-500 to-red-600'
-      default: return 'from-gray-500 to-gray-600'
-    }
+    if (status === 'ahead') return 'bg-green-500/20 border-green-500'
+    if (status === 'behind') return 'bg-red-500/20 border-red-500'
+    return 'bg-blue-500/20 border-blue-500'
   }
 
   const getStatusEmoji = (status: string) => {
-    switch (status) {
-      case 'ahead': return '🚀'
-      case 'on-track': return '✅'
-      case 'behind': return '⚠️'
-      default: return '📊'
-    }
+    if (status === 'ahead') return '🚀'
+    if (status === 'behind') return '⚠️'
+    return '✅'
   }
 
   const getStatusText = (status: string) => {
-    switch (status) {
-      case 'ahead': return 'Oldinda'
-      case 'on-track': return 'Rejalashtirilgan'
-      case 'behind': return 'Orqada'
-      default: return 'Normal'
-    }
+    if (status === 'ahead') return 'Oldindan'
+    if (status === 'behind') return 'Orqada'
+    return "O'z vaqtida"
   }
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="inline-block w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="text-xl text-gray-600">Yuklanmoqda...</p>
-        </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-xl">Yuklanmoqda...</div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6 animate-slide-in">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
-          📊 Oylik Loyihalar
-        </h1>
+    <div className="container mx-auto p-6 max-w-6xl">
+      <h1 className="text-3xl font-bold mb-6 text-center">📅 Oylik Maqsadlar</h1>
+
+      <div className="mb-6 flex items-center justify-center gap-4">
         <button
-          onClick={fetchData}
-          className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-semibold transition-all transform hover:scale-105"
+          onClick={() => changeMonth('prev')}
+          className="px-4 py-2 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors"
         >
-          🔄 Yangilash
+          ←
+        </button>
+        <span className="text-2xl font-semibold">
+          {getMonthName(selectedMonth)} {selectedMonth.getFullYear()}
+        </span>
+        <button
+          onClick={() => changeMonth('next')}
+          className="px-4 py-2 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors"
+        >
+          →
         </button>
       </div>
 
-      {/* Month Selector */}
-      <div className="card-modern">
+      <div className="mb-6 p-6 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-lg border-2 border-blue-500">
         <div className="flex items-center justify-between">
-          <button
-            onClick={() => changeMonth(-1)}
-            className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-xl font-bold transition-all transform hover:scale-105"
-          >
-            ← Oldingi
-          </button>
-          
-          <div className="text-center">
-            <h2 className="text-3xl font-bold text-gray-800">{getMonthName()}</h2>
-            <p className="text-sm text-gray-500 mt-1">Loyihalar holati va progressi</p>
+          <div>
+            <h2 className="text-xl font-semibold mb-2">Umumiy Progress</h2>
+            <div className="flex gap-6 text-lg">
+              <span>🎯 Maqsad: <strong>{totalStats.totalTarget}</strong></span>
+              <span>✅ Bajarildi: <strong>{totalStats.totalCompleted}</strong></span>
+            </div>
           </div>
-          
-          <button
-            onClick={() => changeMonth(1)}
-            className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-xl font-bold transition-all transform hover:scale-105"
-          >
-            Keyingi →
-          </button>
-        </div>
-      </div>
-
-      {/* Umumiy Progress */}
-      <div className="card-modern bg-gradient-to-br from-purple-50 to-blue-50 border-2 border-purple-200">
-        <h3 className="text-2xl font-bold mb-4 flex items-center gap-2">
-          📊 Umumiy Progress
-        </h3>
-        <div className="grid grid-cols-3 gap-4 mb-4">
-          <div className="text-center">
-            <div className="text-4xl font-bold text-blue-600">{totalStats.totalCompleted}</div>
-            <div className="text-sm text-gray-600">Bajarilgan</div>
-          </div>
-          <div className="text-center">
-            <div className="text-4xl font-bold text-purple-600">{totalStats.totalTarget}</div>
-            <div className="text-sm text-gray-600">Maqsad</div>
-          </div>
-          <div className="text-center">
-            <div className="text-4xl font-bold text-green-600">{totalStats.totalProgress}%</div>
-            <div className="text-sm text-gray-600">Progress</div>
+          <div className="text-right">
+            <div className="text-5xl font-bold text-blue-400">
+              {totalStats.totalProgress}%
+            </div>
           </div>
         </div>
-        <div className="w-full bg-gray-200 rounded-full h-8 overflow-hidden">
-          <div
-            className="h-8 rounded-full bg-gradient-to-r from-purple-500 to-blue-600 transition-all duration-500 flex items-center justify-center text-white font-bold"
+        <div className="mt-4 bg-gray-800 rounded-full h-4 overflow-hidden">
+          <div 
+            className="bg-gradient-to-r from-blue-500 to-purple-500 h-full transition-all duration-500"
             style={{ width: `${Math.min(totalStats.totalProgress, 100)}%` }}
-          >
-            {totalStats.totalProgress > 10 && `${totalStats.totalProgress}%`}
-          </div>
+          />
         </div>
       </div>
 
-      {/* Loyihalar */}
-      <div className="space-y-4">
+      <div className="grid gap-4 md:grid-cols-2">
         {projects.map((project) => (
           <div
             key={project.id}
-            className={`card-modern bg-gradient-to-r ${getStatusColor(project.status)} text-white p-6 transform hover:scale-102 transition-all`}
+            className={`p-5 rounded-lg border-2 ${getStatusColor(project.status)} transition-all hover:scale-[1.02]`}
           >
-            <div className="flex items-start justify-between mb-4">
+            <div className="flex items-start justify-between mb-3">
               <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-3xl">{getStatusEmoji(project.status)}</span>
-                  <h3 className="text-2xl font-bold">{project.name}</h3>
-                </div>
-                <p className="text-sm opacity-90">
-                  👤 Mas&#39;ul: <strong>{project.mobilographer}</strong>
-                </p>
-                <p className="text-xs opacity-80 mt-1">
-                  {getStatusText(project.status)} • {project.remainingDays} kun qoldi
+                <h3 className="text-xl font-bold flex items-center gap-2">
+                  {getStatusEmoji(project.status)} {project.name}
+                </h3>
+                <p className="text-sm text-gray-400 mt-1">
+                  👤 {project.mobilographer}
                 </p>
               </div>
-              <div className="text-right">
-                <div className="text-5xl font-bold">{project.progress}%</div>
-                <div className="text-sm opacity-90">{project.completed}/{project.target}</div>
-              </div>
+              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                project.status === 'ahead' 
+                  ? 'bg-green-500/30 text-green-400' 
+                  : project.status === 'behind'
+                  ? 'bg-red-500/30 text-red-400'
+                  : 'bg-blue-500/30 text-blue-400'
+              }`}>
+                {getStatusText(project.status)}
+              </span>
             </div>
 
-            {/* Progress Bar */}
-            <div className="w-full bg-white bg-opacity-30 rounded-full h-4 overflow-hidden mb-3">
-              <div
-                className="h-4 rounded-full bg-white transition-all duration-500"
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>🎯 Maqsad:</span>
+                <span className="font-semibold">{project.target}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span>✅ Bajarildi:</span>
+                <span className="font-semibold text-green-400">{project.completed}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span>📊 Progress:</span>
+                <span className="font-semibold text-blue-400">{project.progress}%</span>
+              </div>
+              {project.remainingDays > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span>⏰ Qolgan kunlar:</span>
+                  <span className="font-semibold text-orange-400">{project.remainingDays}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 bg-gray-800 rounded-full h-3 overflow-hidden">
+              <div 
+                className={`h-full transition-all duration-500 ${
+                  project.status === 'ahead' 
+                    ? 'bg-green-500' 
+                    : project.status === 'behind'
+                    ? 'bg-red-500'
+                    : 'bg-blue-500'
+                }`}
                 style={{ width: `${Math.min(project.progress, 100)}%` }}
               />
             </div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-white bg-opacity-20 rounded-lg p-2 text-center">
-                <div className="text-xl font-bold">{project.completed}</div>
-                <div className="text-xs opacity-90">Bajarilgan</div>
-              </div>
-              <div className="bg-white bg-opacity-20 rounded-lg p-2 text-center">
-                <div className="text-xl font-bold">{project.target - project.completed}</div>
-                <div className="text-xs opacity-90">Qolgan</div>
-              </div>
-              <div className="bg-white bg-opacity-20 rounded-lg p-2 text-center">
-                <div className="text-xl font-bold">{project.target}</div>
-                <div className="text-xs opacity-90">Maqsad</div>
-              </div>
-            </div>
           </div>
         ))}
-
-        {projects.length === 0 && (
-          <div className="card-modern text-center py-12 bg-gray-50">
-            <div className="text-6xl mb-4">📊</div>
-            <p className="text-gray-500 text-lg">Loyihalar topilmadi</p>
-            <p className="text-sm text-gray-400 mt-2">Loyihalar qo&#39;shing yoki boshqa oy tanlang</p>
-          </div>
-        )}
       </div>
 
-      {/* Info */}
-      <div className="card-modern bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200">
-        <div className="flex items-start gap-3">
-          <span className="text-3xl">ℹ️</span>
-          <div>
-            <h3 className="font-bold text-lg mb-2">Muhim ma&#39;lumot:</h3>
-            <ul className="text-sm text-gray-700 space-y-1">
-              <li>🚀 <strong>Oldinda:</strong> Rejalashtirilgandan 10% ko&#39;proq</li>
-              <li>✅ <strong>Rejalashtirilgan:</strong> Normal progress</li>
-              <li>⚠️ <strong>Orqada:</strong> Rejalashtirilgandan 10% kam</li>
-              <li>📊 <strong>Progress:</strong> Faqat POST montaj hisoblanadi</li>
-              <li>🔄 <strong>Avtomatik yangilanish:</strong> Har 10 soniyada</li>
-            </ul>
-          </div>
+      {projects.length === 0 && (
+        <div className="text-center text-gray-400 py-12">
+          Hozircha proyekt yo'q
         </div>
-      </div>
+      )}
     </div>
   )
 }
-```
-
-**Commit:**
-```
-Refactor oylik - show projects progress instead of mobilographers
