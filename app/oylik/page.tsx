@@ -32,6 +32,8 @@ export default function OylikPage() {
       const month = selectedMonth.getMonth() + 1
       const year = selectedMonth.getFullYear()
 
+      console.log('📅 Tanlangan oy:', month, '/', year)
+
       const { data: mobilographers } = await supabase
         .from('mobilographers')
         .select('*')
@@ -51,40 +53,33 @@ export default function OylikPage() {
         .select('*')
         .not('record_id', 'is', null)
 
-      console.log('📹 JAMI VIDEOLAR:', allVideos?.length)
-      if (allVideos && allVideos.length > 0) {
-        console.log('📹 BIRINCHI VIDEO:', allVideos[0])
-      }
+      console.log('📹 Jami videolar:', allVideos?.length)
 
-      // OY BO'YICHA FILTER - RECORD_DATE yoki CREATED_AT
+      // OY BO'YICHA FILTER - record_date ishlatamiz
       const filteredVideos = (allVideos || []).filter(video => {
         try {
-          // AVVAL record_date, keyin created_at
-          let dateStr = video.record_date || video.created_at
-          
-          if (!dateStr) {
-            console.warn('Video sanasi yo\'q:', video.id)
+          if (!video.record_date) {
+            console.warn('⚠️ record_date NULL:', video.id)
             return false
           }
 
-          const videoDate = new Date(dateStr)
+          const videoDate = new Date(video.record_date)
           const videoMonth = videoDate.getMonth() + 1
           const videoYear = videoDate.getFullYear()
           
           const matches = videoMonth === month && videoYear === year
           
           if (matches) {
-            console.log(`✅ Video matched: ${video.id}, Date: ${dateStr}, Month: ${videoMonth}/${videoYear}`)
+            console.log(`✅ Video matched: ${video.id}, Date: ${video.record_date}`)
           }
           
           return matches
         } catch (e) {
-          console.error('Date parse error:', e, video)
+          console.error('❌ Date parse error:', e, video)
           return false
         }
       })
 
-      console.log(`📅 Tanlangan oy: ${month}/${year}`)
       console.log(`📹 Bu oydagi videolar: ${filteredVideos.length}`)
 
       const mobilographersWithStats: MobilographerStat[] = mobilographers.map(mob => {
@@ -261,9 +256,13 @@ export default function OylikPage() {
 
       {totalStats.target > 0 && (
         <div className="card-modern">
-          <h3 className="text-xl font-bold mb-4">📊 Umumiy Progress</h3>
+          <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+            📊 Umumiy Progress (Faqat POST Montaj)
+          </h3>
           <div className="flex items-center justify-between mb-3">
-            <span className="text-lg">{totalStats.completed}/{totalStats.target} post</span>
+            <span className="text-lg text-gray-700">
+              {totalStats.completed}/{totalStats.target} post montaj
+            </span>
             <span className="text-4xl font-bold text-blue-600">{totalProgress}%</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-6 overflow-hidden">
@@ -272,21 +271,32 @@ export default function OylikPage() {
               style={{ width: `${Math.min(totalProgress, 100)}%` }}
             />
           </div>
+          <p className="text-sm text-gray-500 mt-2">
+            Barcha loyihalarning oylik maqsadlari qo'shilgan
+          </p>
         </div>
       )}
 
       <div className="card-modern">
-        <h2 className="text-2xl font-bold mb-6">🏆 Reyting</h2>
+        <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+          🏆 Mobilograflar Reytingi
+        </h2>
+
         {stats.length > 0 ? (
           <div className="space-y-4">
             {stats.map((mob, index) => (
-              <div key={mob.id} className={`p-6 rounded-2xl bg-gradient-to-r ${getRankColor(index)} text-white shadow-lg`}>
+              <div
+                key={mob.id}
+                className={`p-6 rounded-2xl bg-gradient-to-r ${getRankColor(index)} text-white shadow-lg transform hover:scale-102 transition-all`}
+              >
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-4">
                     <div className="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center text-3xl font-bold">
                       {getRankEmoji(index)}
                     </div>
-                    <h3 className="text-2xl font-bold">{mob.name}</h3>
+                    <div>
+                      <h3 className="text-2xl font-bold">{mob.name}</h3>
+                    </div>
                   </div>
                   <div className="text-right">
                     <div className="text-5xl font-bold">{mob.total}</div>
@@ -312,13 +322,18 @@ export default function OylikPage() {
                 {mob.target > 0 && (
                   <div className="bg-white bg-opacity-20 rounded-xl p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-semibold">📊 Progress</span>
+                      <span className="text-sm font-semibold">📊 Oylik Progress</span>
                       <span className="text-2xl font-bold">{mob.progress}%</span>
                     </div>
                     <div className="w-full bg-white bg-opacity-30 rounded-full h-3 mb-2 overflow-hidden">
-                      <div className="h-3 rounded-full bg-white transition-all" style={{ width: `${Math.min(mob.progress, 100)}%` }} />
+                      <div
+                        className="h-3 rounded-full bg-white transition-all duration-500"
+                        style={{ width: `${Math.min(mob.progress, 100)}%` }}
+                      />
                     </div>
-                    <div className="text-xs opacity-90">{mob.post}/{mob.target} post</div>
+                    <div className="text-xs opacity-90">
+                      {mob.post}/{mob.target} post montaj (loyihalar maqsadi)
+                    </div>
                   </div>
                 )}
               </div>
@@ -328,9 +343,31 @@ export default function OylikPage() {
           <div className="text-center py-12 bg-gray-50 rounded-xl">
             <div className="text-6xl mb-4">📊</div>
             <p className="text-gray-500 text-lg">Bu oyda hozircha ma'lumot yo'q</p>
+            <p className="text-sm text-gray-400 mt-2">Boshqa oyni tanlang yoki yangi ish kiriting</p>
           </div>
         )}
+      </div>
+
+      <div className="card-modern bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200">
+        <div className="flex items-start gap-3">
+          <span className="text-3xl">ℹ️</span>
+          <div>
+            <h3 className="font-bold text-lg mb-2">Muhim ma'lumot:</h3>
+            <ul className="text-sm text-gray-700 space-y-1">
+              <li>✅ <strong>record_date</strong> - ish qachon qilingan (to'g'ri sana)</li>
+              <li>✅ Ma'lumotlar har 10 soniyada avtomatik yangilanadi</li>
+              <li>✅ Har bir mobilografning o'z loyihalarining maqsadlari hisoblanadi</li>
+              <li>✅ Ball = Post montaj + Storis montaj + Syomka</li>
+              <li>✅ Progress = Faqat post montaj (loyihalar maqsadiga nisbatan)</li>
+            </ul>
+          </div>
+        </div>
       </div>
     </div>
   )
 }
+```
+
+**Commit message:**
+```
+Fix oylik with record_date + auto-refresh every 10s
