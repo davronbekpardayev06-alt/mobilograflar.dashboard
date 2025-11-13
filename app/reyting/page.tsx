@@ -45,7 +45,6 @@ export default function ReytingPage() {
 
       console.log('📹 JAMI VIDEOLAR:', allVideos?.length)
 
-      // FILTER - record_date ishlatamiz
       let videos = allVideos || []
       if (filterType === 'month') {
         const month = selectedMonth.getMonth() + 1
@@ -53,7 +52,6 @@ export default function ReytingPage() {
         videos = videos.filter(v => {
           try {
             if (!v.record_date) return false
-            
             const d = new Date(v.record_date)
             return d.getMonth() + 1 === month && d.getFullYear() === year
           } catch {
@@ -264,6 +262,10 @@ export default function ReytingPage() {
 }
 ```
 
-**Commit message:**
+---
+
+## ✅ TO'LIQ TUZATILGAN!
+
+### **Commit qiling:**
 ```
-Fix reyting with record_date + auto-refresh every 10s
+Fix reyting with record_date + auto-refresh
