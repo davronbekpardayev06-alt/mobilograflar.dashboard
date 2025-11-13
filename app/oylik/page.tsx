@@ -3,21 +3,26 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
-interface MobilographerStat {
+interface ProjectProgress {
   id: string
   name: string
-  post: number
-  storis: number
-  syomka: number
-  total: number
+  mobilographer: string
   target: number
+  completed: number
   progress: number
+  remainingDays: number
+  status: 'ahead' | 'on-track' | 'behind'
 }
 
 export default function OylikPage() {
-  const [stats, setStats] = useState<MobilographerStat[]>([])
+  const [projects, setProjects] = useState<ProjectProgress[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedMonth, setSelectedMonth] = useState(new Date())
+  const [totalStats, setTotalStats] = useState({
+    totalTarget: 0,
+    totalCompleted: 0,
+    totalProgress: 0
+  })
 
   useEffect(() => {
     fetchData()
@@ -34,20 +39,23 @@ export default function OylikPage() {
 
       console.log('📅 Tanlangan oy:', month, '/', year)
 
-      const { data: mobilographers } = await supabase
-        .from('mobilographers')
-        .select('*')
+      // Loyihalar va mobilograflar
+      const { data: projectsData } = await supabase
+        .from('projects')
+        .select(`
+          *,
+          mobilographers (
+            name
+          )
+        `)
         .order('name')
 
-      if (!mobilographers) {
+      if (!projectsData) {
         setLoading(false)
         return
       }
 
-      const { data: projects } = await supabase
-        .from('projects')
-        .select('*')
-
+      // Barcha videolar (bu oy)
       const { data: allVideos } = await supabase
         .from('videos')
         .select('*')
@@ -55,74 +63,75 @@ export default function OylikPage() {
 
       console.log('📹 Jami videolar:', allVideos?.length)
 
-      // OY BO'YICHA FILTER - record_date ishlatamiz
+      // Oy bo'yicha filter
       const filteredVideos = (allVideos || []).filter(video => {
         try {
-          if (!video.record_date) {
-            console.warn('⚠️ record_date NULL:', video.id)
-            return false
-          }
-
+          if (!video.record_date) return false
           const videoDate = new Date(video.record_date)
-          const videoMonth = videoDate.getMonth() + 1
-          const videoYear = videoDate.getFullYear()
-          
-          const matches = videoMonth === month && videoYear === year
-          
-          if (matches) {
-            console.log(`✅ Video matched: ${video.id}, Date: ${video.record_date}`)
-          }
-          
-          return matches
-        } catch (e) {
-          console.error('❌ Date parse error:', e, video)
+          return videoDate.getMonth() + 1 === month && videoDate.getFullYear() === year
+        } catch {
           return false
         }
       })
 
       console.log(`📹 Bu oydagi videolar: ${filteredVideos.length}`)
 
-      const mobilographersWithStats: MobilographerStat[] = mobilographers.map(mob => {
-        const mobVideos = filteredVideos.filter(v => v.assigned_mobilographer_id === mob.id)
+      // Qolgan kunlar
+      const today = new Date()
+      const lastDayOfMonth = new Date(year, month, 0)
+      const remainingDays = Math.max(0, Math.ceil((lastDayOfMonth.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)))
 
-        const postCount = mobVideos.filter(v => 
-          v.task_type === 'montaj' && 
-          v.content_type === 'post' && 
+      // Har bir loyiha uchun progress
+      const projectsWithProgress: ProjectProgress[] = projectsData.map(project => {
+        // Bu loyihaning bu oydagi completed post montaj videolari
+        const completed = filteredVideos.filter(v => 
+          v.project_id === project.id &&
+          v.task_type === 'montaj' &&
+          v.content_type === 'post' &&
           v.editing_status === 'completed'
         ).length
 
-        const storisCount = mobVideos.filter(v => 
-          v.task_type === 'montaj' && 
-          v.content_type === 'storis' && 
-          v.editing_status === 'completed'
-        ).length
+        const target = project.monthly_target || 0
+        const progress = target > 0 ? Math.round((completed / target) * 100) : 0
 
-        const syomkaCount = mobVideos.filter(v => 
-          v.task_type === 'syomka' && 
-          v.filming_status === 'completed'
-        ).length
+        // Status
+        let status: 'ahead' | 'on-track' | 'behind' = 'on-track'
+        if (remainingDays > 0) {
+          const daysInMonth = new Date(year, month, 0).getDate()
+          const daysPassed = daysInMonth - remainingDays
+          const expectedProgress = (daysPassed / daysInMonth) * 100
+          
+          if (progress > expectedProgress + 10) {
+            status = 'ahead'
+          } else if (progress < expectedProgress - 10) {
+            status = 'behind'
+          }
+        }
 
-        const mobProjects = (projects || []).filter(p => p.mobilographer_id === mob.id)
-        const totalTarget = mobProjects.reduce((sum, p) => sum + (p.monthly_target || 0), 0)
-        const progress = totalTarget > 0 ? Math.round((postCount / totalTarget) * 100) : 0
-
-        console.log(`👤 ${mob.name}: Post=${postCount}, Storis=${storisCount}, Syomka=${syomkaCount}, Total=${postCount + storisCount + syomkaCount}`)
+        console.log(`📊 ${project.name}: Completed=${completed}, Target=${target}, Progress=${progress}%`)
 
         return {
-          id: mob.id,
-          name: mob.name,
-          post: postCount,
-          storis: storisCount,
-          syomka: syomkaCount,
-          total: postCount + storisCount + syomkaCount,
-          target: totalTarget,
-          progress
+          id: project.id,
+          name: project.name,
+          mobilographer: project.mobilographers?.name || 'Tayinlanmagan',
+          target,
+          completed,
+          progress,
+          remainingDays,
+          status
         }
       })
 
-      mobilographersWithStats.sort((a, b) => b.total - a.total)
+      // Sort by progress (highest first)
+      projectsWithProgress.sort((a, b) => b.progress - a.progress)
 
-      setStats(mobilographersWithStats)
+      // Umumiy statistika
+      const totalTarget = projectsWithProgress.reduce((sum, p) => sum + p.target, 0)
+      const totalCompleted = projectsWithProgress.reduce((sum, p) => sum + p.completed, 0)
+      const totalProgress = totalTarget > 0 ? Math.round((totalCompleted / totalTarget) * 100) : 0
+
+      setProjects(projectsWithProgress)
+      setTotalStats({ totalTarget, totalCompleted, totalProgress })
       setLoading(false)
     } catch (error) {
       console.error('❌ XATO:', error)
@@ -140,19 +149,31 @@ export default function OylikPage() {
     return selectedMonth.toLocaleDateString('uz-UZ', { month: 'long', year: 'numeric' })
   }
 
-  const getRankEmoji = (index: number) => {
-    const emojis = ['🥇', '🥈', '🥉']
-    return emojis[index] || `${index + 1}`
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'ahead': return 'from-green-500 to-green-600'
+      case 'on-track': return 'from-blue-500 to-blue-600'
+      case 'behind': return 'from-red-500 to-red-600'
+      default: return 'from-gray-500 to-gray-600'
+    }
   }
 
-  const getRankColor = (index: number) => {
-    const colors = [
-      'from-yellow-400 to-yellow-600',
-      'from-gray-400 to-gray-600',
-      'from-orange-400 to-orange-600',
-      'from-blue-400 to-blue-600'
-    ]
-    return colors[index] || colors[3]
+  const getStatusEmoji = (status: string) => {
+    switch (status) {
+      case 'ahead': return '🚀'
+      case 'on-track': return '✅'
+      case 'behind': return '⚠️'
+      default: return '📊'
+    }
+  }
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'ahead': return 'Oldinda'
+      case 'on-track': return 'Rejalashtirilgan'
+      case 'behind': return 'Orqada'
+      default: return 'Normal'
+    }
   }
 
   if (loading) {
@@ -166,24 +187,11 @@ export default function OylikPage() {
     )
   }
 
-  const totalStats = {
-    post: stats.reduce((sum, s) => sum + s.post, 0),
-    storis: stats.reduce((sum, s) => sum + s.storis, 0),
-    syomka: stats.reduce((sum, s) => sum + s.syomka, 0),
-    ball: stats.reduce((sum, s) => sum + s.total, 0),
-    completed: stats.reduce((sum, s) => sum + s.post, 0),
-    target: stats.reduce((sum, s) => sum + s.target, 0)
-  }
-
-  const totalProgress = totalStats.target > 0 
-    ? Math.round((totalStats.completed / totalStats.target) * 100) 
-    : 0
-
   return (
     <div className="space-y-6 animate-slide-in">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
-          📊 Oylik Hisobot
+          📊 Oylik Loyihalar
         </h1>
         <button
           onClick={fetchData}
@@ -193,6 +201,7 @@ export default function OylikPage() {
         </button>
       </div>
 
+      {/* Month Selector */}
       <div className="card-modern">
         <div className="flex items-center justify-between">
           <button
@@ -204,7 +213,7 @@ export default function OylikPage() {
           
           <div className="text-center">
             <h2 className="text-3xl font-bold text-gray-800">{getMonthName()}</h2>
-            <p className="text-sm text-gray-500 mt-1">Kim ish qildi - o'shaga ball!</p>
+            <p className="text-sm text-gray-500 mt-1">Loyihalar holati va progressi</p>
           </div>
           
           <button
@@ -216,149 +225,108 @@ export default function OylikPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl p-6 shadow-lg transform hover:scale-105 transition-all">
-          <div className="flex items-center gap-3 mb-3">
-            <span className="text-4xl">📄</span>
-            <span className="text-lg opacity-90">Post Montaj</span>
+      {/* Umumiy Progress */}
+      <div className="card-modern bg-gradient-to-br from-purple-50 to-blue-50 border-2 border-purple-200">
+        <h3 className="text-2xl font-bold mb-4 flex items-center gap-2">
+          📊 Umumiy Progress
+        </h3>
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="text-center">
+            <div className="text-4xl font-bold text-blue-600">{totalStats.totalCompleted}</div>
+            <div className="text-sm text-gray-600">Bajarilgan</div>
           </div>
-          <div className="text-5xl font-bold">{totalStats.post}</div>
-          <div className="text-xs opacity-80 mt-1">Bajarilgan</div>
+          <div className="text-center">
+            <div className="text-4xl font-bold text-purple-600">{totalStats.totalTarget}</div>
+            <div className="text-sm text-gray-600">Maqsad</div>
+          </div>
+          <div className="text-center">
+            <div className="text-4xl font-bold text-green-600">{totalStats.totalProgress}%</div>
+            <div className="text-sm text-gray-600">Progress</div>
+          </div>
         </div>
-
-        <div className="bg-gradient-to-br from-pink-500 to-pink-600 text-white rounded-2xl p-6 shadow-lg transform hover:scale-105 transition-all">
-          <div className="flex items-center gap-3 mb-3">
-            <span className="text-4xl">📱</span>
-            <span className="text-lg opacity-90">Storis Montaj</span>
+        <div className="w-full bg-gray-200 rounded-full h-8 overflow-hidden">
+          <div
+            className="h-8 rounded-full bg-gradient-to-r from-purple-500 to-blue-600 transition-all duration-500 flex items-center justify-center text-white font-bold"
+            style={{ width: `${Math.min(totalStats.totalProgress, 100)}%` }}
+          >
+            {totalStats.totalProgress > 10 && `${totalStats.totalProgress}%`}
           </div>
-          <div className="text-5xl font-bold">{totalStats.storis}</div>
-          <div className="text-xs opacity-80 mt-1">Bajarilgan</div>
-        </div>
-
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl p-6 shadow-lg transform hover:scale-105 transition-all">
-          <div className="flex items-center gap-3 mb-3">
-            <span className="text-4xl">📹</span>
-            <span className="text-lg opacity-90">Syomka</span>
-          </div>
-          <div className="text-5xl font-bold">{totalStats.syomka}</div>
-          <div className="text-xs opacity-80 mt-1">Bajarilgan</div>
-        </div>
-
-        <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-2xl p-6 shadow-lg transform hover:scale-105 transition-all">
-          <div className="flex items-center gap-3 mb-3">
-            <span className="text-4xl">⭐</span>
-            <span className="text-lg opacity-90">Jami Ball</span>
-          </div>
-          <div className="text-5xl font-bold">{totalStats.ball}</div>
-          <div className="text-xs opacity-80 mt-1">Post + Storis + Syomka</div>
         </div>
       </div>
 
-      {totalStats.target > 0 && (
-        <div className="card-modern">
-          <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-            📊 Umumiy Progress (Faqat POST Montaj)
-          </h3>
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-lg text-gray-700">
-              {totalStats.completed}/{totalStats.target} post montaj
-            </span>
-            <span className="text-4xl font-bold text-blue-600">{totalProgress}%</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-6 overflow-hidden">
-            <div
-              className="h-6 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 transition-all duration-500"
-              style={{ width: `${Math.min(totalProgress, 100)}%` }}
-            />
-          </div>
-          <p className="text-sm text-gray-500 mt-2">
-            Barcha loyihalarning oylik maqsadlari qo'shilgan
-          </p>
-        </div>
-      )}
-
-      <div className="card-modern">
-        <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-          🏆 Mobilograflar Reytingi
-        </h2>
-
-        {stats.length > 0 ? (
-          <div className="space-y-4">
-            {stats.map((mob, index) => (
-              <div
-                key={mob.id}
-                className={`p-6 rounded-2xl bg-gradient-to-r ${getRankColor(index)} text-white shadow-lg transform hover:scale-102 transition-all`}
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center text-3xl font-bold">
-                      {getRankEmoji(index)}
-                    </div>
-                    <div>
-                      <h3 className="text-2xl font-bold">{mob.name}</h3>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-5xl font-bold">{mob.total}</div>
-                    <div className="text-sm opacity-90">jami ball</div>
-                  </div>
+      {/* Loyihalar */}
+      <div className="space-y-4">
+        {projects.map((project) => (
+          <div
+            key={project.id}
+            className={`card-modern bg-gradient-to-r ${getStatusColor(project.status)} text-white p-6 transform hover:scale-102 transition-all`}
+          >
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-3xl">{getStatusEmoji(project.status)}</span>
+                  <h3 className="text-2xl font-bold">{project.name}</h3>
                 </div>
-
-                <div className="grid grid-cols-3 gap-4 mb-4">
-                  <div className="bg-white bg-opacity-20 rounded-xl p-3 text-center">
-                    <div className="text-3xl font-bold">{mob.post}</div>
-                    <div className="text-xs opacity-90">📄 Post</div>
-                  </div>
-                  <div className="bg-white bg-opacity-20 rounded-xl p-3 text-center">
-                    <div className="text-3xl font-bold">{mob.storis}</div>
-                    <div className="text-xs opacity-90">📱 Storis</div>
-                  </div>
-                  <div className="bg-white bg-opacity-20 rounded-xl p-3 text-center">
-                    <div className="text-3xl font-bold">{mob.syomka}</div>
-                    <div className="text-xs opacity-90">📹 Syomka</div>
-                  </div>
-                </div>
-
-                {mob.target > 0 && (
-                  <div className="bg-white bg-opacity-20 rounded-xl p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-semibold">📊 Oylik Progress</span>
-                      <span className="text-2xl font-bold">{mob.progress}%</span>
-                    </div>
-                    <div className="w-full bg-white bg-opacity-30 rounded-full h-3 mb-2 overflow-hidden">
-                      <div
-                        className="h-3 rounded-full bg-white transition-all duration-500"
-                        style={{ width: `${Math.min(mob.progress, 100)}%` }}
-                      />
-                    </div>
-                    <div className="text-xs opacity-90">
-                      {mob.post}/{mob.target} post montaj (loyihalar maqsadi)
-                    </div>
-                  </div>
-                )}
+                <p className="text-sm opacity-90">
+                  👤 Mas&#39;ul: <strong>{project.mobilographer}</strong>
+                </p>
+                <p className="text-xs opacity-80 mt-1">
+                  {getStatusText(project.status)} • {project.remainingDays} kun qoldi
+                </p>
               </div>
-            ))}
+              <div className="text-right">
+                <div className="text-5xl font-bold">{project.progress}%</div>
+                <div className="text-sm opacity-90">{project.completed}/{project.target}</div>
+              </div>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="w-full bg-white bg-opacity-30 rounded-full h-4 overflow-hidden mb-3">
+              <div
+                className="h-4 rounded-full bg-white transition-all duration-500"
+                style={{ width: `${Math.min(project.progress, 100)}%` }}
+              />
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-white bg-opacity-20 rounded-lg p-2 text-center">
+                <div className="text-xl font-bold">{project.completed}</div>
+                <div className="text-xs opacity-90">Bajarilgan</div>
+              </div>
+              <div className="bg-white bg-opacity-20 rounded-lg p-2 text-center">
+                <div className="text-xl font-bold">{project.target - project.completed}</div>
+                <div className="text-xs opacity-90">Qolgan</div>
+              </div>
+              <div className="bg-white bg-opacity-20 rounded-lg p-2 text-center">
+                <div className="text-xl font-bold">{project.target}</div>
+                <div className="text-xs opacity-90">Maqsad</div>
+              </div>
+            </div>
           </div>
-        ) : (
-          <div className="text-center py-12 bg-gray-50 rounded-xl">
+        ))}
+
+        {projects.length === 0 && (
+          <div className="card-modern text-center py-12 bg-gray-50">
             <div className="text-6xl mb-4">📊</div>
-            <p className="text-gray-500 text-lg">Bu oyda hozircha ma'lumot yo'q</p>
-            <p className="text-sm text-gray-400 mt-2">Boshqa oyni tanlang yoki yangi ish kiriting</p>
+            <p className="text-gray-500 text-lg">Loyihalar topilmadi</p>
+            <p className="text-sm text-gray-400 mt-2">Loyihalar qo&#39;shing yoki boshqa oy tanlang</p>
           </div>
         )}
       </div>
 
+      {/* Info */}
       <div className="card-modern bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200">
         <div className="flex items-start gap-3">
           <span className="text-3xl">ℹ️</span>
           <div>
-            <h3 className="font-bold text-lg mb-2">Muhim ma'lumot:</h3>
+            <h3 className="font-bold text-lg mb-2">Muhim ma&#39;lumot:</h3>
             <ul className="text-sm text-gray-700 space-y-1">
-              <li>✅ <strong>record_date</strong> - ish qachon qilingan (to'g'ri sana)</li>
-              <li>✅ Ma'lumotlar har 10 soniyada avtomatik yangilanadi</li>
-              <li>✅ Har bir mobilografning o'z loyihalarining maqsadlari hisoblanadi</li>
-              <li>✅ Ball = Post montaj + Storis montaj + Syomka</li>
-              <li>✅ Progress = Faqat post montaj (loyihalar maqsadiga nisbatan)</li>
+              <li>🚀 <strong>Oldinda:</strong> Rejalashtirilgandan 10% ko&#39;proq</li>
+              <li>✅ <strong>Rejalashtirilgan:</strong> Normal progress</li>
+              <li>⚠️ <strong>Orqada:</strong> Rejalashtirilgandan 10% kam</li>
+              <li>📊 <strong>Progress:</strong> Faqat POST montaj hisoblanadi</li>
+              <li>🔄 <strong>Avtomatik yangilanish:</strong> Har 10 soniyada</li>
             </ul>
           </div>
         </div>
@@ -368,6 +336,6 @@ export default function OylikPage() {
 }
 ```
 
-**Commit message:**
+**Commit:**
 ```
-Fix oylik with record_date + auto-refresh every 10s
+Refactor oylik - show projects progress instead of mobilographers
