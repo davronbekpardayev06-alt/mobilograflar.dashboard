@@ -44,21 +44,17 @@ export default function ReytingPage() {
         .not('record_id', 'is', null)
 
       console.log('📹 JAMI VIDEOLAR:', allVideos?.length)
-      if (allVideos && allVideos.length > 0) {
-        console.log('📹 BIRINCHI VIDEO:', allVideos[0])
-      }
 
-      // FILTER - record_date yoki created_at
+      // FILTER - record_date ishlatamiz
       let videos = allVideos || []
       if (filterType === 'month') {
         const month = selectedMonth.getMonth() + 1
         const year = selectedMonth.getFullYear()
         videos = videos.filter(v => {
           try {
-            let dateStr = v.record_date || v.created_at
-            if (!dateStr) return false
+            if (!v.record_date) return false
             
-            const d = new Date(dateStr)
+            const d = new Date(v.record_date)
             return d.getMonth() + 1 === month && d.getFullYear() === year
           } catch {
             return false
@@ -164,7 +160,7 @@ export default function ReytingPage() {
         <div className="flex items-center gap-4 mb-4">
           <button
             onClick={() => setFilterType('all')}
-            className={`px-6 py-3 rounded-xl font-bold transition-all ${
+            className={`px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105 ${
               filterType === 'all'
                 ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
@@ -174,7 +170,7 @@ export default function ReytingPage() {
           </button>
           <button
             onClick={() => setFilterType('month')}
-            className={`px-6 py-3 rounded-xl font-bold transition-all ${
+            className={`px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105 ${
               filterType === 'month'
                 ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
@@ -185,12 +181,18 @@ export default function ReytingPage() {
         </div>
 
         {filterType === 'month' && (
-          <div className="flex items-center justify-between pt-4 border-t-2">
-            <button onClick={() => changeMonth(-1)} className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold">
+          <div className="flex items-center justify-between pt-4 border-t-2 border-gray-200">
+            <button
+              onClick={() => changeMonth(-1)}
+              className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold transition-all transform hover:scale-105"
+            >
               ← Oldingi
             </button>
-            <h3 className="text-2xl font-bold">{getMonthName()}</h3>
-            <button onClick={() => changeMonth(1)} className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold">
+            <h3 className="text-2xl font-bold text-gray-800">{getMonthName()}</h3>
+            <button
+              onClick={() => changeMonth(1)}
+              className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold transition-all transform hover:scale-105"
+            >
               Keyingi →
             </button>
           </div>
@@ -199,7 +201,10 @@ export default function ReytingPage() {
 
       <div className="space-y-4">
         {stats.map((mob, index) => (
-          <div key={mob.id} className={`card-modern ${getRankColor(index)} text-white p-6`}>
+          <div
+            key={mob.id}
+            className={`card-modern ${getRankColor(index)} text-white p-6 transform hover:scale-102 transition-all cursor-pointer`}
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center text-3xl font-bold">
@@ -208,27 +213,57 @@ export default function ReytingPage() {
                 <div>
                   <h3 className="text-2xl font-bold mb-2">{mob.name}</h3>
                   <div className="flex gap-4 text-sm">
-                    <span className="bg-white bg-opacity-20 px-3 py-1 rounded-lg">📄 Post: {mob.post}</span>
-                    <span className="bg-white bg-opacity-20 px-3 py-1 rounded-lg">📱 Storis: {mob.storis}</span>
-                    <span className="bg-white bg-opacity-20 px-3 py-1 rounded-lg">📹 Syomka: {mob.syomka}</span>
+                    <span className="bg-white bg-opacity-20 px-3 py-1 rounded-lg font-semibold">
+                      📄 Post: <strong>{mob.post}</strong>
+                    </span>
+                    <span className="bg-white bg-opacity-20 px-3 py-1 rounded-lg font-semibold">
+                      📱 Storis: <strong>{mob.storis}</strong>
+                    </span>
+                    <span className="bg-white bg-opacity-20 px-3 py-1 rounded-lg font-semibold">
+                      📹 Syomka: <strong>{mob.syomka}</strong>
+                    </span>
                   </div>
                 </div>
               </div>
               <div className="text-right">
                 <div className="text-6xl font-bold">{mob.totalPoints}</div>
-                <div className="text-sm opacity-90">jami ball</div>
+                <div className="text-sm opacity-90 font-semibold">jami ball</div>
               </div>
             </div>
           </div>
         ))}
 
         {stats.length === 0 && (
-          <div className="card-modern text-center py-12">
+          <div className="card-modern text-center py-12 bg-gray-50">
             <div className="text-6xl mb-4">🏆</div>
-            <p className="text-gray-500 text-lg">Hozircha ma'lumot yo'q</p>
+            <p className="text-gray-500 text-lg font-semibold">
+              {filterType === 'month' ? 'Bu oyda hozircha ma\'lumot yo\'q' : 'Hozircha ma\'lumot yo\'q'}
+            </p>
+            <p className="text-sm text-gray-400 mt-2">
+              {filterType === 'month' ? 'Boshqa oyni tanlang' : 'Ishlarni kiriting'}
+            </p>
           </div>
         )}
+      </div>
+
+      <div className="card-modern bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-200">
+        <div className="flex items-start gap-3">
+          <span className="text-3xl">✅</span>
+          <div>
+            <h3 className="font-bold text-lg mb-2">Real-time yangilanish!</h3>
+            <ul className="text-sm text-gray-700 space-y-1">
+              <li>✅ Ma'lumotlar har 10 soniyada avtomatik yangilanadi</li>
+              <li>✅ record_date - ish qachon qilingan (to'g'ri sana)</li>
+              <li>✅ Ball = Post montaj + Storis montaj + Syomka</li>
+            </ul>
+          </div>
+        </div>
       </div>
     </div>
   )
 }
+```
+
+**Commit message:**
+```
+Fix reyting with record_date + auto-refresh every 10s
