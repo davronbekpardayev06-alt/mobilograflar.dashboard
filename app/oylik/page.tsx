@@ -76,7 +76,7 @@ export default function OylikPage() {
           console.error('Error fetching assignments:', assignmentsError)
         }
 
-        const mobilographerIds = assignments?.map(a => a.mobilographer_id) || []
+        const mobilographerIds = assignments?.map((a) => a.mobilographer_id) || []
 
         let mobilographerNames: string[] = []
         if (mobilographerIds.length > 0) {
@@ -88,7 +88,7 @@ export default function OylikPage() {
           if (mobError) {
             console.error('Error fetching mobilographers:', mobError)
           } else {
-            mobilographerNames = mobilographers?.map(m => m.name) || []
+            mobilographerNames = mobilographers?.map((m) => m.name) || []
           }
         }
 
@@ -106,9 +106,10 @@ export default function OylikPage() {
         }
 
         const completed = workEntries?.length || 0
-        const progress = project.monthly_target > 0 
-          ? Math.round((completed / project.monthly_target) * 100) 
-          : 0
+        const progress =
+          project.monthly_target > 0
+            ? Math.round((completed / project.monthly_target) * 100)
+            : 0
 
         let status: 'ahead' | 'on-track' | 'behind' = 'on-track'
         if (month === currentMonth && year === currentYear) {
@@ -137,9 +138,8 @@ export default function OylikPage() {
 
       const totalTarget = calculatedProjects.reduce((sum, p) => sum + p.target, 0)
       const totalCompleted = calculatedProjects.reduce((sum, p) => sum + p.completed, 0)
-      const totalProgress = totalTarget > 0 
-        ? Math.round((totalCompleted / totalTarget) * 100) 
-        : 0
+      const totalProgress =
+        totalTarget > 0 ? Math.round((totalCompleted / totalTarget) * 100) : 0
 
       setTotalStats({
         totalTarget,
@@ -155,14 +155,24 @@ export default function OylikPage() {
 
   const getMonthName = (date: Date) => {
     const months = [
-      'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun',
-      'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'
+      'Yanvar',
+      'Fevral',
+      'Mart',
+      'Aprel',
+      'May',
+      'Iyun',
+      'Iyul',
+      'Avgust',
+      'Sentabr',
+      'Oktabr',
+      'Noyabr',
+      'Dekabr'
     ]
     return months[date.getMonth()]
   }
 
   const changeMonth = (direction: 'prev' | 'next') => {
-    setSelectedMonth(prev => {
+    setSelectedMonth((prev) => {
       const newDate = new Date(prev)
       if (direction === 'prev') {
         newDate.setMonth(newDate.getMonth() - 1)
@@ -226,8 +236,12 @@ export default function OylikPage() {
           <div>
             <h2 className="text-xl font-semibold mb-2">Umumiy Progress</h2>
             <div className="flex gap-6 text-lg">
-              <span>🎯 Maqsad: <strong>{totalStats.totalTarget}</strong></span>
-              <span>✅ Bajarildi: <strong>{totalStats.totalCompleted}</strong></span>
+              <span>
+                🎯 Maqsad: <strong>{totalStats.totalTarget}</strong>
+              </span>
+              <span>
+                ✅ Bajarildi: <strong>{totalStats.totalCompleted}</strong>
+              </span>
             </div>
           </div>
           <div className="text-right">
@@ -237,7 +251,7 @@ export default function OylikPage() {
           </div>
         </div>
         <div className="mt-4 bg-gray-800 rounded-full h-4 overflow-hidden">
-          <div 
+          <div
             className="bg-gradient-to-r from-blue-500 to-purple-500 h-full transition-all duration-500"
             style={{ width: `${Math.min(totalStats.totalProgress, 100)}%` }}
           />
@@ -248,7 +262,9 @@ export default function OylikPage() {
         {projects.map((project) => (
           <div
             key={project.id}
-            className={`p-5 rounded-lg border-2 ${getStatusColor(project.status)} transition-all hover:scale-[1.02]`}
+            className={`p-5 rounded-lg border-2 ${getStatusColor(
+              project.status
+            )} transition-all hover:scale-[1.02]`}
           >
             <div className="flex items-start justify-between mb-3">
               <div>
@@ -259,13 +275,15 @@ export default function OylikPage() {
                   👤 {project.mobilographer}
                 </p>
               </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                project.status === 'ahead' 
-                  ? 'bg-green-500/30 text-green-400' 
-                  : project.status === 'behind'
-                  ? 'bg-red-500/30 text-red-400'
-                  : 'bg-blue-500/30 text-blue-400'
-              }`}>
+              <span
+                className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                  project.status === 'ahead'
+                    ? 'bg-green-500/30 text-green-400'
+                    : project.status === 'behind'
+                    ? 'bg-red-500/30 text-red-400'
+                    : 'bg-blue-500/30 text-blue-400'
+                }`}
+              >
                 {getStatusText(project.status)}
               </span>
             </div>
@@ -277,25 +295,31 @@ export default function OylikPage() {
               </div>
               <div className="flex justify-between text-sm">
                 <span>✅ Bajarildi:</span>
-                <span className="font-semibold text-green-400">{project.completed}</span>
+                <span className="font-semibold text-green-400">
+                  {project.completed}
+                </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span>📊 Progress:</span>
-                <span className="font-semibold text-blue-400">{project.progress}%</span>
+                <span className="font-semibold text-blue-400">
+                  {project.progress}%
+                </span>
               </div>
               {project.remainingDays > 0 && (
                 <div className="flex justify-between text-sm">
                   <span>⏰ Qolgan kunlar:</span>
-                  <span className="font-semibold text-orange-400">{project.remainingDays}</span>
+                  <span className="font-semibold text-orange-400">
+                    {project.remainingDays}
+                  </span>
                 </div>
               )}
             </div>
 
             <div className="mt-4 bg-gray-800 rounded-full h-3 overflow-hidden">
-              <div 
+              <div
                 className={`h-full transition-all duration-500 ${
-                  project.status === 'ahead' 
-                    ? 'bg-green-500' 
+                  project.status === 'ahead'
+                    ? 'bg-green-500'
                     : project.status === 'behind'
                     ? 'bg-red-500'
                     : 'bg-blue-500'
