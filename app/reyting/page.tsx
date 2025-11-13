@@ -44,7 +44,6 @@ export default function ReytingPage() {
         return
       }
 
-      // Har bir mobilographer uchun statistikani hisoblash
       const statsPromises = mobilographers.map(async (mob) => {
         let query = supabase
           .from('work_entries')
@@ -144,7 +143,6 @@ export default function ReytingPage() {
     <div className="container mx-auto p-6 max-w-4xl">
       <h1 className="text-3xl font-bold mb-6 text-center">📊 Reyting</h1>
 
-      {/* Filter */}
       <div className="mb-6 flex gap-4 items-center justify-center">
         <button
           onClick={() => setFilterType('all')}
@@ -168,7 +166,6 @@ export default function ReytingPage() {
         </button>
       </div>
 
-      {/* Month selector */}
       {filterType === 'month' && (
         <div className="mb-6 flex items-center justify-center gap-4">
           <button
@@ -189,7 +186,6 @@ export default function ReytingPage() {
         </div>
       )}
 
-      {/* Stats table */}
       <div className="space-y-3">
         {stats.map((stat, index) => (
           <div
