@@ -6,8 +6,8 @@ import { supabase } from '@/lib/supabase'
 interface MobilographerStat {
   id: string
   name: string
-  post: number
-  storis: number
+  posti: number
+  storiki: number
   syomka: number
   totalPoints: number
 }
@@ -28,244 +28,204 @@ export default function ReytingPage() {
     try {
       setLoading(true)
 
-      const { data: mobilographers } = await supabase
+      const { data: mobilographers, error } = await supabase
         .from('mobilographers')
         .select('*')
         .order('name')
+
+      if (error) {
+        console.error('Error fetching mobilographers:', error)
+        setLoading(false)
+        return
+      }
 
       if (!mobilographers) {
         setLoading(false)
         return
       }
 
-      const { data: allVideos } = await supabase
-        .from('videos')
-        .select('*')
-        .not('record_id', 'is', null)
+      // Har bir mobilographer uchun statistikani hisoblash
+      const statsPromises = mobilographers.map(async (mob) => {
+        let query = supabase
+          .from('work_entries')
+          .select('*')
+          .eq('mobilographer_id', mob.id)
 
-      console.log('📹 JAMI VIDEOLAR:', allVideos?.length)
+        if (filterType === 'month') {
+          const startOfMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1)
+          const endOfMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0)
+          query = query
+            .gte('date', startOfMonth.toISOString())
+            .lte('date', endOfMonth.toISOString())
+        }
 
-      let videos = allVideos || []
-      if (filterType === 'month') {
-        const month = selectedMonth.getMonth() + 1
-        const year = selectedMonth.getFullYear()
-        videos = videos.filter(v => {
-          try {
-            if (!v.record_date) return false
-            const d = new Date(v.record_date)
-            return d.getMonth() + 1 === month && d.getFullYear() === year
-          } catch {
-            return false
+        const { data: entries, error: entriesError } = await query
+
+        if (entriesError) {
+          console.error('Error fetching entries:', entriesError)
+          return {
+            id: mob.id,
+            name: mob.name,
+            posti: 0,
+            storiki: 0,
+            syomka: 0,
+            totalPoints: 0
           }
-        })
-      }
+        }
 
-      console.log('📹 FILTERLANGAN VIDEOLAR:', videos.length)
-
-      const mobilographersWithStats: MobilographerStat[] = mobilographers.map(mob => {
-        const mobVids = videos.filter(v => v.assigned_mobilographer_id === mob.id)
-        
-        const post = mobVids.filter(v => 
-          v.task_type === 'montaj' && 
-          v.content_type === 'post' && 
-          v.editing_status === 'completed'
-        ).length
-        
-        const storis = mobVids.filter(v => 
-          v.task_type === 'montaj' && 
-          v.content_type === 'storis' && 
-          v.editing_status === 'completed'
-        ).length
-        
-        const syomka = mobVids.filter(v => 
-          v.task_type === 'syomka' && 
-          v.filming_status === 'completed'
-        ).length
-
-        console.log(`👤 ${mob.name}: Post=${post}, Storis=${storis}, Syomka=${syomka}, Total=${post + storis + syomka}`)
+        const posti = entries?.filter(e => e.type === 'montaj' && e.content_type === 'post').length || 0
+        const storiki = entries?.filter(e => e.type === 'montaj' && e.content_type === 'story').length || 0
+        const syomka = entries?.filter(e => e.type === 'syomka').length || 0
+        const totalPoints = posti + (storiki * 0.5) + syomka
 
         return {
           id: mob.id,
           name: mob.name,
-          post,
-          storis,
+          posti,
+          storiki,
           syomka,
-          totalPoints: post + storis + syomka
+          totalPoints
         }
       })
 
-      mobilographersWithStats.sort((a, b) => b.totalPoints - a.totalPoints)
-
-      setStats(mobilographersWithStats)
-      setLoading(false)
+      const calculatedStats = await Promise.all(statsPromises)
+      const sortedStats = calculatedStats.sort((a, b) => b.totalPoints - a.totalPoints)
+      setStats(sortedStats)
     } catch (error) {
-      console.error('❌ XATO:', error)
+      console.error('Unexpected error:', error)
+    } finally {
       setLoading(false)
     }
   }
 
-  const changeMonth = (dir: number) => {
-    const newDate = new Date(selectedMonth)
-    newDate.setMonth(newDate.getMonth() + dir)
-    setSelectedMonth(newDate)
-  }
-
-  const getMonthName = () => {
-    return selectedMonth.toLocaleDateString('uz-UZ', { month: 'long', year: 'numeric' })
+  const getMonthName = (date: Date) => {
+    const months = [
+      'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun',
+      'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'
+    ]
+    return months[date.getMonth()]
   }
 
   const getRankEmoji = (index: number) => {
-    const emojis = ['🥇', '🥈', '🥉']
-    return emojis[index] || `${index + 1}`
+    if (index === 0) return '🥇'
+    if (index === 1) return '🥈'
+    if (index === 2) return '🥉'
+    return `${index + 1}`
   }
 
   const getRankColor = (index: number) => {
-    const colors = [
-      'bg-gradient-to-br from-yellow-400 to-yellow-600',
-      'bg-gradient-to-br from-gray-400 to-gray-600',
-      'bg-gradient-to-br from-orange-400 to-orange-600',
-      'bg-gradient-to-br from-blue-400 to-blue-600'
-    ]
-    return colors[index] || colors[3]
+    if (index === 0) return 'bg-yellow-500/20 border-yellow-500'
+    if (index === 1) return 'bg-gray-400/20 border-gray-400'
+    if (index === 2) return 'bg-orange-600/20 border-orange-600'
+    return 'bg-gray-800 border-gray-700'
+  }
+
+  const changeMonth = (direction: 'prev' | 'next') => {
+    setSelectedMonth(prev => {
+      const newDate = new Date(prev)
+      if (direction === 'prev') {
+        newDate.setMonth(newDate.getMonth() - 1)
+      } else {
+        newDate.setMonth(newDate.getMonth() + 1)
+      }
+      return newDate
+    })
   }
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="inline-block w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="text-xl text-gray-600">Yuklanmoqda...</p>
-        </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-xl">Yuklanmoqda...</div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6 animate-slide-in">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
-          🏆 Reyting Jadvali
-        </h1>
+    <div className="container mx-auto p-6 max-w-4xl">
+      <h1 className="text-3xl font-bold mb-6 text-center">📊 Reyting</h1>
+
+      {/* Filter */}
+      <div className="mb-6 flex gap-4 items-center justify-center">
         <button
-          onClick={fetchData}
-          className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-semibold transition-all transform hover:scale-105"
+          onClick={() => setFilterType('all')}
+          className={`px-4 py-2 rounded-lg ${
+            filterType === 'all' 
+              ? 'bg-blue-500 text-white' 
+              : 'bg-gray-800 text-gray-400'
+          }`}
         >
-          🔄 Yangilash
+          Umumiy
+        </button>
+        <button
+          onClick={() => setFilterType('month')}
+          className={`px-4 py-2 rounded-lg ${
+            filterType === 'month' 
+              ? 'bg-blue-500 text-white' 
+              : 'bg-gray-800 text-gray-400'
+          }`}
+        >
+          Oylik
         </button>
       </div>
 
-      <div className="card-modern">
-        <div className="flex items-center gap-4 mb-4">
+      {/* Month selector */}
+      {filterType === 'month' && (
+        <div className="mb-6 flex items-center justify-center gap-4">
           <button
-            onClick={() => setFilterType('all')}
-            className={`px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105 ${
-              filterType === 'all'
-                ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
+            onClick={() => changeMonth('prev')}
+            className="px-4 py-2 bg-gray-800 rounded-lg hover:bg-gray-700"
           >
-            📊 Barcha Vaqt
+            ←
           </button>
+          <span className="text-xl font-semibold">
+            {getMonthName(selectedMonth)} {selectedMonth.getFullYear()}
+          </span>
           <button
-            onClick={() => setFilterType('month')}
-            className={`px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105 ${
-              filterType === 'month'
-                ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
+            onClick={() => changeMonth('next')}
+            className="px-4 py-2 bg-gray-800 rounded-lg hover:bg-gray-700"
           >
-            📅 Oylik
+            →
           </button>
         </div>
+      )}
 
-        {filterType === 'month' && (
-          <div className="flex items-center justify-between pt-4 border-t-2 border-gray-200">
-            <button
-              onClick={() => changeMonth(-1)}
-              className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold transition-all transform hover:scale-105"
-            >
-              ← Oldingi
-            </button>
-            <h3 className="text-2xl font-bold text-gray-800">{getMonthName()}</h3>
-            <button
-              onClick={() => changeMonth(1)}
-              className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold transition-all transform hover:scale-105"
-            >
-              Keyingi →
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div className="space-y-4">
-        {stats.map((mob, index) => (
+      {/* Stats table */}
+      <div className="space-y-3">
+        {stats.map((stat, index) => (
           <div
-            key={mob.id}
-            className={`card-modern ${getRankColor(index)} text-white p-6 transform hover:scale-102 transition-all cursor-pointer`}
+            key={stat.id}
+            className={`p-4 rounded-lg border-2 ${getRankColor(index)} transition-all hover:scale-[1.02]`}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center text-3xl font-bold">
+                <div className="text-3xl font-bold w-12 text-center">
                   {getRankEmoji(index)}
                 </div>
                 <div>
-                  <h3 className="text-2xl font-bold mb-2">{mob.name}</h3>
-                  <div className="flex gap-4 text-sm">
-                    <span className="bg-white bg-opacity-20 px-3 py-1 rounded-lg font-semibold">
-                      📄 Post: <strong>{mob.post}</strong>
-                    </span>
-                    <span className="bg-white bg-opacity-20 px-3 py-1 rounded-lg font-semibold">
-                      📱 Storis: <strong>{mob.storis}</strong>
-                    </span>
-                    <span className="bg-white bg-opacity-20 px-3 py-1 rounded-lg font-semibold">
-                      📹 Syomka: <strong>{mob.syomka}</strong>
-                    </span>
+                  <h3 className="text-xl font-semibold">{stat.name}</h3>
+                  <div className="flex gap-4 text-sm text-gray-400 mt-1">
+                    <span>📱 Posti: {stat.posti}</span>
+                    <span>📖 Storiki: {stat.storiki}</span>
+                    <span>🎥 Syomka: {stat.syomka}</span>
                   </div>
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-6xl font-bold">{mob.totalPoints}</div>
-                <div className="text-sm opacity-90 font-semibold">jami ball</div>
+                <div className="text-3xl font-bold text-blue-400">
+                  {stat.totalPoints.toFixed(1)}
+                </div>
+                <div className="text-sm text-gray-400">ball</div>
               </div>
             </div>
           </div>
         ))}
-
-        {stats.length === 0 && (
-          <div className="card-modern text-center py-12 bg-gray-50">
-            <div className="text-6xl mb-4">🏆</div>
-            <p className="text-gray-500 text-lg font-semibold">
-              {filterType === 'month' ? 'Bu oyda hozircha ma\'lumot yo\'q' : 'Hozircha ma\'lumot yo\'q'}
-            </p>
-            <p className="text-sm text-gray-400 mt-2">
-              {filterType === 'month' ? 'Boshqa oyni tanlang' : 'Ishlarni kiriting'}
-            </p>
-          </div>
-        )}
       </div>
 
-      <div className="card-modern bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-200">
-        <div className="flex items-start gap-3">
-          <span className="text-3xl">✅</span>
-          <div>
-            <h3 className="font-bold text-lg mb-2">Real-time yangilanish!</h3>
-            <ul className="text-sm text-gray-700 space-y-1">
-              <li>✅ Ma'lumotlar har 10 soniyada avtomatik yangilanadi</li>
-              <li>✅ record_date - ish qachon qilingan (to'g'ri sana)</li>
-              <li>✅ Ball = Post montaj + Storis montaj + Syomka</li>
-            </ul>
-          </div>
+      {stats.length === 0 && (
+        <div className="text-center text-gray-400 py-12">
+          Hozircha ma'lumot yo'q
         </div>
-      </div>
+      )}
     </div>
   )
 }
-```
-
----
-
-## ✅ TO'LIQ TUZATILGAN!
-
-### **Commit qiling:**
-```
-Fix reyting with record_date + auto-refresh
