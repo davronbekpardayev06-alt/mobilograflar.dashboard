@@ -1,6 +1,6 @@
 {
-  "name": "mobilograflar-dashboard",
-  "version": "1.0.0",
+  "name": "mobilograflar.dashboard",
+  "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,7 +9,8 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.39.3",
+    "exceljs": "^4.4.0",
+    "@supabase/supabase-js": "^2.39.0",
     "next": "14.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
@@ -19,8 +20,59 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.0.1",
+    "eslint": "^8",
+    "eslint-config-next": "14.1.0",
     "postcss": "^8",
     "tailwindcss": "^3.3.0",
     "typescript": "^5"
   }
 }
+```
+
+## 3️⃣ Commit qiling
+```
+Commit message: Add exceljs library for Excel export
+```
+
+**Commit changes** tugmasini bosing
+
+---
+
+## 4️⃣ Vercel'da deploy kutish ⏳
+
+1. **Vercel Dashboard'ga boring:**
+   - https://vercel.com
+
+2. **Deployments'ni kuzating:**
+   - Avtomatik yangi deploy boshlanadi
+   - "Building..." → "Ready ✅" ga o'tguncha kuting
+   - 2-3 daqiqa
+
+3. **Agar xatolik bo'lsa:**
+   - Deployment'ni bosing
+   - "View Function Logs" ni bosing
+   - Qayerda xatolik borligini ko'ring
+
+---
+
+## 5️⃣ Test qiling! 🎉
+
+1. **Saytingizni oching:**
+   - https://sizning-saytingiz.vercel.app
+
+2. **Excel tugmasini bosing:**
+   - O'ng yuqoridagi yashil "📥 Excel" tugmasi
+
+3. **Excel yuklanadi:**
+   - `Mobilograflar-Hisobot-2024-11-18.xlsx`
+   - Ochib ko'ring - 4 ta chiroyli sheet bor!
+
+---
+
+## ✅ Qisqacha:
+```
+1. package.json → Edit ✏️
+2. Yangi kod bilan almashtirish (yuqoridagi)
+3. Commit changes 💾
+4. Vercel'da 2-3 daqiqa kutish ⏳
+5. Saytni ochib test qilish 🎉
