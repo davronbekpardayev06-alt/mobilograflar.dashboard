@@ -24,7 +24,7 @@ export default function HaftalikPage() {
     weekEnd: ''
   })
   const [loading, setLoading] = useState(true)
-  const [selectedWeek, setSelectedWeek] = useState<number>(0) // 0 = joriy hafta, -1 = o'tgan hafta, etc.
+  const [selectedWeek, setSelectedWeek] = useState<number>(-1) // -1 = o'tgan hafta (DEFAULT)
   const [availableWeeks, setAvailableWeeks] = useState<any[]>([])
 
   useEffect(() => {
@@ -36,33 +36,50 @@ export default function HaftalikPage() {
   }, [selectedWeek])
 
   const generateAvailableWeeks = () => {
-    // Oxirgi 8 haftani yaratish
+    // O'tgan 8 haftani yaratish
     const weeks = []
-    for (let i = 0; i < 8; i++) {
+    
+    // Joriy hafta (hali tugamagan)
+    const currentWeekInfo = getWeekRange(0)
+    weeks.push({
+      value: 0,
+      label: '📅 Joriy hafta (hali tugamagan)',
+      ...currentWeekInfo
+    })
+    
+    // O'tgan haftalar (to'liq tugagan)
+    for (let i = 1; i <= 8; i++) {
       const weekInfo = getWeekRange(-i)
       weeks.push({
         value: -i,
-        label: i === 0 ? '📅 Joriy hafta' : `📅 ${weekInfo.label}`,
+        label: i === 1 ? '📅 O\'tgan hafta' : `📅 ${weekInfo.label}`,
         ...weekInfo
       })
     }
+    
     setAvailableWeeks(weeks)
+  }
+
+  const formatDate = (date: Date) => {
+    const day = date.getDate()
+    const month = date.getMonth() + 1
+    const year = date.getFullYear()
+    return `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`
   }
 
   const getWeekRange = (weeksAgo: number) => {
     const today = new Date()
     
     // Bugungi kunni haftaning qaysi kuniga to'g'ri kelishini aniqlash
-    const dayOfWeek = today.getDay() // 0 = yakshanba, 1 = dushanba, ...
+    const dayOfWeek = today.getDay() // 0 = yakshanba, 1 = dushanba, 2 = seshanba, ...
     
     // Dushanbagacha bo'lgan kunlar soni
-    // Agar yakshanba bo'lsa (0), 6 kun orqaga (o'tgan haftaning dushanbasiga)
-    // Aks holda dayOfWeek - 1
     const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
     
     // Joriy haftaning dushanbasini topish
     const currentWeekMonday = new Date(today)
     currentWeekMonday.setDate(today.getDate() - daysFromMonday)
+    currentWeekMonday.setHours(0, 0, 0, 0)
     
     // Tanlangan haftaning dushanbasini topish
     const weekStart = new Date(currentWeekMonday)
@@ -98,11 +115,14 @@ export default function HaftalikPage() {
       }
     }
     
+    // DD/MM/YYYY formatida dateRange
+    const formattedDateRange = `${formatDate(weekStart)} - ${formatDate(weekEnd)}`
+    
     return {
       weekStart,
       weekEnd,
       label,
-      dateRange: `${startDay} ${startMonth} - ${endDay} ${endMonth}`
+      dateRange: formattedDateRange
     }
   }
 
@@ -175,6 +195,8 @@ export default function HaftalikPage() {
     }
   }
 
+  const isCurrentWeek = selectedWeek === 0
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -214,15 +236,26 @@ export default function HaftalikPage() {
         </div>
       </div>
 
-      {/* Hafta kunlari ko'rsatkichi */}
-      <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl p-4 shadow-sm">
+      {/* Hafta holati ko'rsatkichi */}
+      <div className={`border-2 rounded-xl p-4 shadow-sm ${
+        isCurrentWeek 
+          ? 'bg-gradient-to-r from-orange-50 to-yellow-50 border-orange-300'
+          : 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200'
+      }`}>
         <div className="flex items-center gap-3">
-          <span className="text-3xl">📅</span>
+          <span className="text-3xl">{isCurrentWeek ? '⏳' : '✅'}</span>
           <div className="flex-1">
-            <p className="text-sm text-gray-600 font-medium">Hafta oralig'i:</p>
+            <p className="text-sm text-gray-600 font-medium">
+              {isCurrentWeek ? 'Joriy hafta (hali tugamagan):' : 'To\'liq tugagan hafta:'}
+            </p>
             <p className="text-lg font-bold text-gray-800">
               Dushanba - Yakshanba ({weeklyData.dateRange})
             </p>
+            {isCurrentWeek && (
+              <p className="text-xs text-orange-600 mt-1">
+                ⚠️ Raqamlar o'zgarib turadi, chunki hafta hali tugamagan
+              </p>
+            )}
           </div>
           {weeklyData.totalWork > 0 && (
             <div className="text-right">
@@ -241,7 +274,7 @@ export default function HaftalikPage() {
             <span className="text-lg opacity-90">Jami Ish</span>
           </div>
           <div className="text-5xl font-bold mb-2">{weeklyData.totalWork}</div>
-          <p className="text-sm opacity-90">Bu haftada</p>
+          <p className="text-sm opacity-90">{isCurrentWeek ? 'Hozircha' : 'Bu haftada'}</p>
         </div>
 
         <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-2xl p-6 shadow-lg card-hover transform transition-transform hover:scale-105">
@@ -268,6 +301,11 @@ export default function HaftalikPage() {
         <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
           <span>🏆</span>
           <span>Haftalik Reyting</span>
+          {isCurrentWeek && (
+            <span className="text-sm font-normal text-orange-600 ml-2">
+              (Hali o'zgarishi mumkin)
+            </span>
+          )}
         </h2>
         
         <div className="space-y-4">
