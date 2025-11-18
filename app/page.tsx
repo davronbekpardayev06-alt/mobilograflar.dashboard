@@ -14,17 +14,132 @@ export default function Home() {
   const [recentActivity, setRecentActivity] = useState<any[]>([])
   const [projectsStatus, setProjectsStatus] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  
+  // YANGI FILTER STATE
+  const [filterType, setFilterType] = useState<'today' | 'yesterday' | 'month'>('month')
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear())
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1)
+  const [availableYears, setAvailableYears] = useState<number[]>([])
+
+  useEffect(() => {
+    loadAvailableYears()
+  }, [])
 
   useEffect(() => {
     fetchData()
-  }, [])
+  }, [filterType, selectedYear, selectedMonth])
+
+  const loadAvailableYears = async () => {
+    try {
+      const { data: records } = await supabase
+        .from('records')
+        .select('date')
+        .order('date', { ascending: false })
+
+      if (!records || records.length === 0) {
+        setAvailableYears([new Date().getFullYear()])
+        return
+      }
+
+      const years = new Set<number>()
+      records.forEach(record => {
+        if (record.date) {
+          const year = new Date(record.date).getFullYear()
+          years.add(year)
+        }
+      })
+
+      setAvailableYears(Array.from(years).sort((a, b) => b - a))
+    } catch (error) {
+      console.error('Error loading years:', error)
+      setAvailableYears([new Date().getFullYear()])
+    }
+  }
+
+  const getMonthName = (monthNum: number) => {
+    const months = [
+      'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun',
+      'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'
+    ]
+    return months[monthNum - 1]
+  }
+
+  const getFilterLabel = () => {
+    if (filterType === 'today') return 'Bugun'
+    if (filterType === 'yesterday') return 'Kecha'
+    return `${getMonthName(selectedMonth)} ${selectedYear}`
+  }
 
   const fetchData = async () => {
     try {
-      const { data: mobilographers } = await supabase
-        .from('mobilographers')
-        .select('*')
+      // DATE RANGE ni hisoblash
+      const today = new Date()
+      let startDate: Date
+      let endDate: Date
 
+      if (filterType === 'today') {
+        startDate = new Date(today)
+        startDate.setHours(0, 0, 0, 0)
+        endDate = new Date(today)
+        endDate.setHours(23, 59, 59, 999)
+      } else if (filterType === 'yesterday') {
+        startDate = new Date(today)
+        startDate.setDate(today.getDate() - 1)
+        startDate.setHours(0, 0, 0, 0)
+        endDate = new Date(today)
+        endDate.setDate(today.getDate() - 1)
+        endDate.setHours(23, 59, 59, 999)
+      } else {
+        startDate = new Date(selectedYear, selectedMonth - 1, 1)
+        endDate = new Date(selectedYear, selectedMonth, 0, 23, 59, 59, 999)
+      }
+
+      const startDateStr = startDate.toISOString().split('T')[0]
+      const endDateStr = endDate.toISOString().split('T')[0]
+
+      // TANLANGAN DAVR uchun RECORDS
+      const { data: periodRecords } = await supabase
+        .from('records')
+        .select('*, mobilographers(id, name)')
+        .gte('date', startDateStr)
+        .lte('date', endDateStr)
+
+      // Tanlangan davrdagi FAOL MOBILOGRAFLAR
+      const activeMobilographers = new Set(
+        periodRecords?.map(r => r.mobilographer_id) || []
+      )
+
+      // Tanlangan davrdagi FAOL LOYIHALAR
+      const activeProjects = new Set(
+        periodRecords?.map(r => r.project_id) || []
+      )
+
+      // Tanlangan davrdagi VIDEOLAR soni
+      const totalVideos = periodRecords?.reduce((sum, record) => {
+        return sum + (record.count || 1)
+      }, 0) || 0
+
+      // Bugungi ish (har doim bugungi)
+      const todayStr = new Date().toISOString().split('T')[0]
+      const { data: todayRecords } = await supabase
+        .from('records')
+        .select('*')
+        .eq('date', todayStr)
+
+      // OXIRGI 5 FAOLIYAT (tanlangan davrdan)
+      const { data: recentRecords } = await supabase
+        .from('records')
+        .select(`
+          *,
+          mobilographers(name),
+          projects(name)
+        `)
+        .gte('date', startDateStr)
+        .lte('date', endDateStr)
+        .order('created_at', { ascending: false })
+        .limit(5)
+
+      // LOYIHALAR HOLATI (tanlangan oy uchun)
       const { data: projects } = await supabase
         .from('projects')
         .select(`
@@ -42,56 +157,20 @@ export default function Home() {
           )
         `)
 
-      const today = new Date().toISOString().split('T')[0]
-      
-      const { data: todayRecords } = await supabase
-        .from('records')
-        .select('*')
-        .eq('date', today)
-
-      const { data: recentRecords } = await supabase
-        .from('records')
-        .select(`
-          *,
-          mobilographers(name),
-          projects(name)
-        `)
-        .order('created_at', { ascending: false })
-        .limit(5)
-
-      // FAQAT KIRITILGAN VIDEOLAR - record_id bor (REJA emas!)
-      const totalVideos = projects?.reduce((sum, p) => {
-        const kiritishVideos = p.videos?.filter((v: any) => {
-          // Faqat record_id bor videolar (reja emas!)
-          return v.record_id !== null && v.record_id !== undefined
-        }) || []
-        return sum + kiritishVideos.length
-      }, 0) || 0
-
       const projectsWithStatus = projects?.map(project => {
-        // FAQAT SHU OYNING MONTAJ POST'LARINI HISOBLASH - FAQAT KIRITISHDAN!
-        const now = new Date()
-        const currentMonth = now.getMonth()
-        const currentYear = now.getFullYear()
-        
-        const thisMonthVideos = project.videos?.filter((v: any) => {
-          // FAQAT MONTAJ TASK_TYPE!
+        // Tanlangan oyning videolarini hisoblash
+        const monthVideos = project.videos?.filter((v: any) => {
           if (v.task_type !== 'montaj') return false
-          
-          // FAQAT POST CONTENT_TYPE!
           if (v.content_type !== 'post') return false
-          
-          // FAQAT COMPLETED EDITING_STATUS!
           if (v.editing_status !== 'completed') return false
-          
-          // FAQAT KIRITISHDAN (record_id bor)!
           if (!v.record_id) return false
           
           const videoDate = new Date(v.created_at)
-          return videoDate.getMonth() === currentMonth && videoDate.getFullYear() === currentYear
+          return videoDate.getMonth() === selectedMonth - 1 && 
+                 videoDate.getFullYear() === selectedYear
         })
         
-        const completed = thisMonthVideos?.length || 0
+        const completed = monthVideos?.length || 0
         const target = project.monthly_target || 12
         const progress = Math.round((completed / target) * 100)
         
@@ -118,8 +197,8 @@ export default function Home() {
       })
 
       setStats({
-        mobilographers: mobilographers?.length || 0,
-        projects: projects?.length || 0,
+        mobilographers: activeMobilographers.size,
+        projects: activeProjects.size,
         totalVideos,
         todayWork: todayRecords?.length || 0
       })
@@ -170,6 +249,90 @@ export default function Home() {
 
   return (
     <div className="space-y-6 animate-slide-in">
+      {/* YANGI FILTER SECTION */}
+      <div className="bg-white rounded-2xl p-6 shadow-lg border-2 border-gray-100">
+        <h2 className="text-xl font-bold mb-4">📊 Davr Tanlash</h2>
+        
+        <div className="flex items-center gap-4 mb-4">
+          <button
+            onClick={() => setFilterType('today')}
+            className={`px-6 py-3 rounded-xl font-bold whitespace-nowrap transition-all ${
+              filterType === 'today'
+                ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg scale-105'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            📅 Bugun
+          </button>
+
+          <button
+            onClick={() => setFilterType('yesterday')}
+            className={`px-6 py-3 rounded-xl font-bold whitespace-nowrap transition-all ${
+              filterType === 'yesterday'
+                ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg scale-105'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            📅 Kecha
+          </button>
+
+          <button
+            onClick={() => setFilterType('month')}
+            className={`px-6 py-3 rounded-xl font-bold whitespace-nowrap transition-all ${
+              filterType === 'month'
+                ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg scale-105'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            📊 Oy bo'yicha
+          </button>
+        </div>
+
+        {filterType === 'month' && (
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            <div>
+              <label className="block text-sm font-semibold mb-2 text-gray-700">
+                📆 Yil
+              </label>
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none font-semibold"
+              >
+                {availableYears.map(year => (
+                  <option key={year} value={year}>{year} yil</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold mb-2 text-gray-700">
+                📅 Oy
+              </label>
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all outline-none font-semibold"
+              >
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(month => (
+                  <option key={month} value={month}>{getMonthName(month)}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-4 bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-xl p-4">
+          <div className="flex items-center gap-3">
+            <span className="text-3xl">📊</span>
+            <div>
+              <p className="text-sm text-gray-600 font-medium">Ko'rsatilgan davr:</p>
+              <p className="text-xl font-bold text-gray-800">{getFilterLabel()}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Statistika kartochkalari */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl p-6 shadow-lg card-hover">
@@ -178,6 +341,7 @@ export default function Home() {
             <span className="text-lg opacity-90">Mobilograflar</span>
           </div>
           <div className="text-5xl font-bold">{stats.mobilographers}</div>
+          <div className="text-xs opacity-80 mt-2">{getFilterLabel()}</div>
         </div>
 
         <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-2xl p-6 shadow-lg card-hover">
@@ -186,15 +350,16 @@ export default function Home() {
             <span className="text-lg opacity-90">Loyihalar</span>
           </div>
           <div className="text-5xl font-bold">{stats.projects}</div>
+          <div className="text-xs opacity-80 mt-2">{getFilterLabel()}</div>
         </div>
 
         <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl p-6 shadow-lg card-hover">
           <div className="flex items-center gap-3 mb-3">
             <span className="text-4xl">🎥</span>
-            <span className="text-lg opacity-90">Jami Videolar</span>
+            <span className="text-lg opacity-90">Jami Ishlar</span>
           </div>
           <div className="text-5xl font-bold">{stats.totalVideos}</div>
-          <div className="text-xs opacity-80 mt-2">Faqat kiritilgan</div>
+          <div className="text-xs opacity-80 mt-2">{getFilterLabel()}</div>
         </div>
 
         <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-2xl p-6 shadow-lg card-hover">
@@ -203,13 +368,14 @@ export default function Home() {
             <span className="text-lg opacity-90">Bugun</span>
           </div>
           <div className="text-5xl font-bold">{stats.todayWork}</div>
+          <div className="text-xs opacity-80 mt-2">Har doim bugungi</div>
         </div>
       </div>
 
       {/* Kim Nima Qilyapti */}
       <div className="card-modern">
         <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-          👀 Kim Nima Qilyapti? (Oxirgi Faoliyat)
+          👀 Faoliyat ({getFilterLabel()})
         </h2>
         
         {recentActivity.length > 0 ? (
@@ -257,7 +423,7 @@ export default function Home() {
         ) : (
           <div className="text-center py-8 bg-gray-50 rounded-xl">
             <div className="text-5xl mb-3">😴</div>
-            <p className="text-gray-500">Hozircha faoliyat yo'q</p>
+            <p className="text-gray-500">{getFilterLabel()} uchun faoliyat yo'q</p>
           </div>
         )}
       </div>
@@ -266,7 +432,7 @@ export default function Home() {
       <div className="card-modern">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-bold flex items-center gap-2">
-            📊 Loyihalar Holati (Shu Oylik Progress - Faqat MONTAJ POST)
+            📊 Loyihalar ({getFilterLabel()})
           </h2>
           <Link href="/loyihalar">
             <button className="text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-2 transition">
@@ -312,7 +478,7 @@ export default function Home() {
 
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-600">
-                      📄 {project.completed}/{project.target} post montaj
+                      📄 {project.completed}/{project.target} post
                     </span>
                     {deadlineInfo && (
                       <span className={`font-bold ${deadlineInfo.color}`}>
@@ -386,21 +552,6 @@ export default function Home() {
             </div>
           </div>
         </Link>
-      </div>
-
-      {/* Eslatma */}
-      <div className="card-modern bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200">
-        <div className="flex items-start gap-3">
-          <span className="text-3xl">ℹ️</span>
-          <div>
-            <h3 className="font-bold text-lg mb-2">Muhim eslatma:</h3>
-            <ul className="text-sm text-gray-700 space-y-1">
-              <li>✅ <strong>Jami Videolar:</strong> Faqat kiritilgan videolar (reja emas!)</li>
-              <li>✅ <strong>Progress:</strong> Faqat MONTAJ POST (Storis va Syomka emas)</li>
-              <li>✅ <strong>Oylik maqsad:</strong> Har bir loyihaning post montaj maqsadi</li>
-            </ul>
-          </div>
-        </div>
       </div>
     </div>
   )
