@@ -15,14 +15,18 @@ interface GroupedRecord {
 export default function KiritishPage() {
   const [mobilographers, setMobilographers] = useState<any[]>([])
   const [projects, setProjects] = useState<any[]>([])
-  const [recentRecords, setRecentRecords] = useState<any[]>([])
   const [groupedRecords, setGroupedRecords] = useState<GroupedRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [isTimerRunning, setIsTimerRunning] = useState(false)
   const [timerSeconds, setTimerSeconds] = useState(0)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
-  const [selectedTab, setSelectedTab] = useState<'today' | 'yesterday' | 'week' | 'month'>('today')
+  
+  // YANGI FILTER STATE
+  const [filterType, setFilterType] = useState<'today' | 'yesterday' | 'month'>('today')
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear())
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1)
+  const [availableYears, setAvailableYears] = useState<number[]>([])
   
   const [newRecord, setNewRecord] = useState({
     mobilographer_id: '',
@@ -37,11 +41,12 @@ export default function KiritishPage() {
 
   useEffect(() => {
     fetchData()
+    loadAvailableYears()
   }, [])
 
   useEffect(() => {
     fetchRecordsByFilter()
-  }, [selectedTab])
+  }, [filterType, selectedYear, selectedMonth])
 
   useEffect(() => {
     let interval: any
@@ -52,6 +57,33 @@ export default function KiritishPage() {
     }
     return () => clearInterval(interval)
   }, [isTimerRunning])
+
+  const loadAvailableYears = async () => {
+    try {
+      const { data: records } = await supabase
+        .from('records')
+        .select('date')
+        .order('date', { ascending: false })
+
+      if (!records || records.length === 0) {
+        setAvailableYears([new Date().getFullYear()])
+        return
+      }
+
+      const years = new Set<number>()
+      records.forEach(record => {
+        if (record.date) {
+          const year = new Date(record.date).getFullYear()
+          years.add(year)
+        }
+      })
+
+      setAvailableYears(Array.from(years).sort((a, b) => b - a))
+    } catch (error) {
+      console.error('Error loading years:', error)
+      setAvailableYears([new Date().getFullYear()])
+    }
+  }
 
   const fetchData = async () => {
     try {
@@ -68,9 +100,6 @@ export default function KiritishPage() {
       setMobilographers(mobilographersData || [])
       setProjects(projectsData || [])
       setLoading(false)
-      
-      // Bugun uchun avtomatik yuklash
-      fetchRecordsByFilter()
     } catch (error) {
       console.error('Error:', error)
       setLoading(false)
@@ -80,33 +109,36 @@ export default function KiritishPage() {
   const fetchRecordsByFilter = async () => {
     try {
       const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      
       let startDate: Date
-      let endDate: Date = new Date()
-      endDate.setHours(23, 59, 59, 999)
+      let endDate: Date
 
-      switch (selectedTab) {
+      switch (filterType) {
         case 'today':
           startDate = new Date(today)
+          startDate.setHours(0, 0, 0, 0)
+          endDate = new Date(today)
+          endDate.setHours(23, 59, 59, 999)
           break
+        
         case 'yesterday':
           startDate = new Date(today)
           startDate.setDate(today.getDate() - 1)
+          startDate.setHours(0, 0, 0, 0)
           endDate = new Date(today)
-          endDate.setSeconds(endDate.getSeconds() - 1)
+          endDate.setDate(today.getDate() - 1)
+          endDate.setHours(23, 59, 59, 999)
           break
-        case 'week':
-          startDate = new Date(today)
-          const dayOfWeek = today.getDay()
-          const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
-          startDate.setDate(today.getDate() - daysFromMonday)
-          break
+        
         case 'month':
-          startDate = new Date(today.getFullYear(), today.getMonth(), 1)
+          startDate = new Date(selectedYear, selectedMonth - 1, 1)
+          endDate = new Date(selectedYear, selectedMonth, 0, 23, 59, 59, 999)
           break
+        
         default:
           startDate = new Date(today)
+          startDate.setHours(0, 0, 0, 0)
+          endDate = new Date(today)
+          endDate.setHours(23, 59, 59, 999)
       }
 
       const startDateStr = startDate.toISOString().split('T')[0]
@@ -123,9 +155,6 @@ export default function KiritishPage() {
         .lte('date', endDateStr)
         .order('created_at', { ascending: false })
 
-      setRecentRecords(recordsData || [])
-      
-      // Guruhlash
       groupRecords(recordsData || [])
     } catch (error) {
       console.error('Error fetching records:', error)
@@ -167,6 +196,22 @@ export default function KiritishPage() {
     setGroupedRecords(Array.from(grouped.values()))
   }
 
+  const getMonthName = (monthNum: number) => {
+    const months = [
+      'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun',
+      'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'
+    ]
+    return months[monthNum - 1]
+  }
+
+  const getFilterLabel = () => {
+    switch (filterType) {
+      case 'today': return 'Bugun'
+      case 'yesterday': return 'Kecha'
+      case 'month': return `${getMonthName(selectedMonth)} ${selectedYear}`
+    }
+  }
+
   const formatTime = (seconds: number) => {
     const hrs = Math.floor(seconds / 3600)
     const mins = Math.floor((seconds % 3600) / 60)
@@ -181,15 +226,6 @@ export default function KiritishPage() {
   const resetTimer = () => {
     setIsTimerRunning(false)
     setTimerSeconds(0)
-  }
-
-  const getTabLabel = () => {
-    switch (selectedTab) {
-      case 'today': return 'Bugun'
-      case 'yesterday': return 'Kecha'
-      case 'week': return 'Bu hafta'
-      case 'month': return 'Bu oy'
-    }
   }
 
   const handleDelete = async (id: string) => {
@@ -333,6 +369,7 @@ export default function KiritishPage() {
       
       resetTimer()
       fetchRecordsByFilter()
+      loadAvailableYears()
       setSubmitting(false)
     } catch (error) {
       console.error('Error:', error)
@@ -358,6 +395,7 @@ export default function KiritishPage() {
         ➕ Yangi Yozuv
       </h1>
 
+      {/* FORM - Same as before, keeping all the form code */}
       <div className="max-w-4xl mx-auto">
         <div className="bg-white rounded-3xl shadow-2xl border-2 border-gray-100 overflow-hidden">
           <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-6 text-white">
@@ -391,7 +429,6 @@ export default function KiritishPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="p-8 space-y-6">
-            {/* Form fields - same as before */}
             <div className="grid grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-semibold mb-2 text-gray-700">
@@ -592,32 +629,99 @@ export default function KiritishPage() {
         </div>
       </div>
 
-      {/* NEW: Filtered and Grouped Records */}
+      {/* ===== YANGI FILTER SECTION ===== */}
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-bold">📋 Kiritilgan Ishlar</h2>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-2 mb-4 overflow-x-auto">
-          {[
-            { key: 'today', label: '📅 Bugun', color: 'blue' },
-            { key: 'yesterday', label: '📅 Kecha', color: 'purple' },
-            { key: 'week', label: '📆 Bu hafta', color: 'green' },
-            { key: 'month', label: '📊 Bu oy', color: 'orange' }
-          ].map(tab => (
+        {/* Filter Section */}
+        <div className="bg-white rounded-2xl p-6 shadow-lg border-2 border-gray-100 mb-4">
+          <div className="flex items-center gap-4 mb-4">
+            {/* Bugun */}
             <button
-              key={tab.key}
-              onClick={() => setSelectedTab(tab.key as any)}
+              onClick={() => setFilterType('today')}
               className={`px-6 py-3 rounded-xl font-bold whitespace-nowrap transition-all ${
-                selectedTab === tab.key
-                  ? `bg-gradient-to-r from-${tab.color}-500 to-${tab.color}-600 text-white shadow-lg scale-105`
+                filterType === 'today'
+                  ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg scale-105'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              {tab.label}
+              📅 Bugun
             </button>
-          ))}
+
+            {/* Kecha */}
+            <button
+              onClick={() => setFilterType('yesterday')}
+              className={`px-6 py-3 rounded-xl font-bold whitespace-nowrap transition-all ${
+                filterType === 'yesterday'
+                  ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg scale-105'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              📅 Kecha
+            </button>
+
+            {/* Oy bo'yicha */}
+            <button
+              onClick={() => setFilterType('month')}
+              className={`px-6 py-3 rounded-xl font-bold whitespace-nowrap transition-all ${
+                filterType === 'month'
+                  ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg scale-105'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              📊 Oy bo'yicha
+            </button>
+          </div>
+
+          {/* Oy va Yil tanlash (faqat month bo'lganda) */}
+          {filterType === 'month' && (
+            <div className="grid grid-cols-2 gap-4 mt-4">
+              {/* Yil */}
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-gray-700">
+                  📆 Yil
+                </label>
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none font-semibold"
+                >
+                  {availableYears.map(year => (
+                    <option key={year} value={year}>{year} yil</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Oy */}
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-gray-700">
+                  📅 Oy
+                </label>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all outline-none font-semibold"
+                >
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(month => (
+                    <option key={month} value={month}>{getMonthName(month)}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* Ko'rsatilgan davr */}
+          <div className="mt-4 bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-xl p-4">
+            <div className="flex items-center gap-3">
+              <span className="text-3xl">📊</span>
+              <div>
+                <p className="text-sm text-gray-600 font-medium">Ko'rsatilgan davr:</p>
+                <p className="text-xl font-bold text-gray-800">{getFilterLabel()}</p>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Grouped Records */}
@@ -677,8 +781,15 @@ export default function KiritishPage() {
                               : 'Syomka'}
                           </p>
                           <p className="text-xs text-gray-500">
-                            {new Date(record.date).toLocaleDateString('uz-UZ')} • {record.time || '---'}
+                            {new Date(record.date).toLocaleDateString('uz-UZ', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric'
+                            })} • {record.time || '---'}
                           </p>
+                          {record.notes && (
+                            <p className="text-xs text-gray-600 mt-1">{record.notes}</p>
+                          )}
                         </div>
                       </div>
                       <button
@@ -700,7 +811,7 @@ export default function KiritishPage() {
         ) : (
           <div className="text-center py-16 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
             <div className="text-7xl mb-4">📋</div>
-            <p className="text-gray-500 text-xl font-medium mb-2">{getTabLabel()} uchun ma'lumot yo'q</p>
+            <p className="text-gray-500 text-xl font-medium mb-2">{getFilterLabel()} uchun ma'lumot yo'q</p>
             <p className="text-gray-400 text-sm">Yangi ish kiritganingizda bu yerda ko'rinadi</p>
           </div>
         )}
