@@ -2,7 +2,7 @@
 
 import './globals.css'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 
 export default function RootLayout({
@@ -11,7 +11,6 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
-  const router = useRouter()
   const [currentTime, setCurrentTime] = useState('')
   const [isRefreshing, setIsRefreshing] = useState(false)
 
@@ -38,7 +37,6 @@ export default function RootLayout({
 
   const handleExport = async () => {
     try {
-      // CSV formatida export
       const response = await fetch('/api/export')
       if (response.ok) {
         const blob = await response.blob()
@@ -75,7 +73,6 @@ export default function RootLayout({
     <html lang="uz">
       <body>
         <div className="min-h-screen">
-          {/* Header */}
           <header className="bg-white shadow-sm border-b sticky top-0 z-50">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
               <div className="flex items-center justify-between">
@@ -112,7 +109,6 @@ export default function RootLayout({
             </div>
           </header>
 
-          {/* Navigation Tabs */}
           <nav className="bg-white border-b sticky top-[88px] z-40">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex overflow-x-auto scrollbar-hide">
@@ -139,7 +135,6 @@ export default function RootLayout({
             </div>
           </nav>
 
-          {/* Main Content */}
           <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             {children}
           </main>
