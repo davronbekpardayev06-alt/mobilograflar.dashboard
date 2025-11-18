@@ -3,8 +3,21 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
+interface MobilographerStats {
+  id: string
+  name: string
+  postCount: number
+  storisCount: number
+  syomkaCount: number
+  totalPoints: number
+  totalCompleted: number
+  totalTarget: number
+  progress: number
+  projectsCount: number
+}
+
 export default function OylikPage() {
-  const [stats, setStats] = useState<any[]>([])
+  const [stats, setStats] = useState<MobilographerStats[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedMonth, setSelectedMonth] = useState(new Date())
 
@@ -17,23 +30,40 @@ export default function OylikPage() {
       const month = selectedMonth.getMonth()
       const year = selectedMonth.getFullYear()
 
-      const { data: mobilographers } = await supabase
+      // Oyning birinchi va oxirgi kunini to'g'ri topish
+      const firstDay = new Date(year, month, 1)
+      const lastDay = new Date(year, month + 1, 0) // Keyingi oyning 0-kuni = bu oyning oxirgi kuni
+
+      const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`
+      const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`
+
+      console.log('Fetching data for:', startDate, 'to', endDate)
+
+      const { data: mobilographers, error: mobError } = await supabase
         .from('mobilographers')
         .select('*')
         .order('name')
 
-      const { data: projects } = await supabase
+      if (mobError) throw mobError
+
+      const { data: projects, error: projError } = await supabase
         .from('projects')
         .select(`
           *,
           videos(id, editing_status, filming_status, content_type, task_type, created_at, record_id)
         `)
 
-      const { data: records } = await supabase
+      if (projError) throw projError
+
+      const { data: records, error: recError } = await supabase
         .from('records')
         .select('*')
-        .gte('date', `${year}-${String(month + 1).padStart(2, '0')}-01`)
-        .lte('date', `${year}-${String(month + 1).padStart(2, '0')}-31`)
+        .gte('date', startDate)
+        .lte('date', endDate)
+
+      if (recError) throw recError
+
+      console.log('Records found:', records?.length)
 
       const mobilographersWithStats = mobilographers?.map(mob => {
         const mobProjects = projects?.filter(p => p.mobilographer_id === mob.id) || []
@@ -66,6 +96,8 @@ export default function OylikPage() {
 
         // Records statistikasi
         const mobRecords = records?.filter(r => r.mobilographer_id === mob.id) || []
+        
+        console.log(`${mob.name}: ${mobRecords.length} records`)
         
         const postCount = mobRecords
           .filter(r => r.type === 'editing' && r.content_type === 'post')
@@ -111,7 +143,11 @@ export default function OylikPage() {
   }
 
   const getMonthName = () => {
-    return selectedMonth.toLocaleDateString('uz-UZ', { month: 'long', year: 'numeric' })
+    const months = [
+      'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun',
+      'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'
+    ]
+    return `${months[selectedMonth.getMonth()]} ${selectedMonth.getFullYear()}`
   }
 
   const getRankEmoji = (index: number) => {
@@ -162,7 +198,7 @@ export default function OylikPage() {
         <div className="flex items-center justify-between">
           <button
             onClick={() => changeMonth(-1)}
-            className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-xl font-bold transition transform hover:scale-105"
+            className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-xl font-bold transition transform hover:scale-105 shadow-lg"
           >
             ← Oldingi oy
           </button>
@@ -174,7 +210,7 @@ export default function OylikPage() {
           
           <button
             onClick={() => changeMonth(1)}
-            className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-xl font-bold transition transform hover:scale-105"
+            className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-xl font-bold transition transform hover:scale-105 shadow-lg"
           >
             Keyingi oy →
           </button>
@@ -183,41 +219,45 @@ export default function OylikPage() {
 
       {/* Umumiy Statistika */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl p-6 shadow-lg">
+        <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl p-6 shadow-lg card-hover transform transition-transform hover:scale-105">
           <div className="flex items-center gap-3 mb-3">
             <span className="text-4xl">📄</span>
             <span className="text-lg opacity-90">Post Montaj</span>
           </div>
           <div className="text-5xl font-bold">{totalStats.post}</div>
+          <p className="text-sm opacity-90 mt-2">{getMonthName()}</p>
         </div>
 
-        <div className="bg-gradient-to-br from-pink-500 to-pink-600 text-white rounded-2xl p-6 shadow-lg">
+        <div className="bg-gradient-to-br from-pink-500 to-pink-600 text-white rounded-2xl p-6 shadow-lg card-hover transform transition-transform hover:scale-105">
           <div className="flex items-center gap-3 mb-3">
             <span className="text-4xl">📱</span>
             <span className="text-lg opacity-90">Storis Montaj</span>
           </div>
           <div className="text-5xl font-bold">{totalStats.storis}</div>
+          <p className="text-sm opacity-90 mt-2">{getMonthName()}</p>
         </div>
 
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl p-6 shadow-lg">
+        <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl p-6 shadow-lg card-hover transform transition-transform hover:scale-105">
           <div className="flex items-center gap-3 mb-3">
             <span className="text-4xl">📹</span>
             <span className="text-lg opacity-90">Syomka</span>
           </div>
           <div className="text-5xl font-bold">{totalStats.syomka}</div>
+          <p className="text-sm opacity-90 mt-2">{getMonthName()}</p>
         </div>
 
-        <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-2xl p-6 shadow-lg">
+        <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-2xl p-6 shadow-lg card-hover transform transition-transform hover:scale-105">
           <div className="flex items-center gap-3 mb-3">
             <span className="text-4xl">⭐</span>
             <span className="text-lg opacity-90">Jami Ball</span>
           </div>
           <div className="text-5xl font-bold">{totalStats.totalPoints}</div>
+          <p className="text-sm opacity-90 mt-2">{getMonthName()}</p>
         </div>
       </div>
 
       {/* Progress Umumiy */}
-      <div className="card-modern">
+      <div className="card-modern bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200">
         <h3 className="text-xl font-bold mb-4">📊 Umumiy Progress (Faqat MONTAJ POST)</h3>
         <div className="flex items-center justify-between mb-3">
           <span className="text-lg text-gray-700">
@@ -229,7 +269,7 @@ export default function OylikPage() {
         </div>
         <div className="w-full bg-gray-200 rounded-full h-6">
           <div
-            className="progress-bar h-6 rounded-full bg-gradient-to-r from-blue-500 to-purple-600"
+            className="progress-bar h-6 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 transition-all duration-500"
             style={{ 
               width: `${Math.min(totalStats.totalTarget > 0 ? (totalStats.totalCompleted / totalStats.totalTarget) * 100 : 0, 100)}%` 
             }}
@@ -248,7 +288,7 @@ export default function OylikPage() {
             {stats.map((mob, index) => (
               <div
                 key={mob.id}
-                className={`p-6 rounded-2xl bg-gradient-to-r ${getRankColor(index)} text-white shadow-lg`}
+                className={`p-6 rounded-2xl bg-gradient-to-r ${getRankColor(index)} text-white shadow-lg transform transition-all hover:scale-102`}
               >
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-4">
@@ -291,7 +331,7 @@ export default function OylikPage() {
                   </div>
                   <div className="w-full bg-white bg-opacity-30 rounded-full h-3 mb-2">
                     <div
-                      className="h-3 rounded-full bg-white"
+                      className="h-3 rounded-full bg-white transition-all duration-500"
                       style={{ width: `${Math.min(mob.progress, 100)}%` }}
                     />
                   </div>
@@ -303,9 +343,10 @@ export default function OylikPage() {
             ))}
           </div>
         ) : (
-          <div className="text-center py-12 bg-gray-50 rounded-xl">
-            <div className="text-6xl mb-4">📊</div>
-            <p className="text-gray-500 text-lg">Bu oyda hozircha ma'lumot yo'q</p>
+          <div className="text-center py-16 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
+            <div className="text-7xl mb-4">📊</div>
+            <p className="text-gray-500 text-xl font-medium mb-2">Bu oyda hozircha ma'lumot yo'q</p>
+            <p className="text-gray-400 text-sm">{getMonthName()}</p>
           </div>
         )}
       </div>
