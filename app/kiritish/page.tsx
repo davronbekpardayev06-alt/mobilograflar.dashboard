@@ -3,15 +3,26 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 
+interface GroupedRecord {
+  project: any
+  mobilographer: any
+  records: any[]
+  totalPost: number
+  totalStoris: number
+  totalSyomka: number
+}
+
 export default function KiritishPage() {
   const [mobilographers, setMobilographers] = useState<any[]>([])
   const [projects, setProjects] = useState<any[]>([])
   const [recentRecords, setRecentRecords] = useState<any[]>([])
+  const [groupedRecords, setGroupedRecords] = useState<GroupedRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [isTimerRunning, setIsTimerRunning] = useState(false)
   const [timerSeconds, setTimerSeconds] = useState(0)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [selectedTab, setSelectedTab] = useState<'today' | 'yesterday' | 'week' | 'month'>('today')
   
   const [newRecord, setNewRecord] = useState({
     mobilographer_id: '',
@@ -27,6 +38,10 @@ export default function KiritishPage() {
   useEffect(() => {
     fetchData()
   }, [])
+
+  useEffect(() => {
+    fetchRecordsByFilter()
+  }, [selectedTab])
 
   useEffect(() => {
     let interval: any
@@ -50,24 +65,106 @@ export default function KiritishPage() {
         .select('*, mobilographers(name)')
         .order('name')
 
-      const { data: recordsData } = await supabase
-        .from('records')
-        .select(`
-          *,
-          mobilographers(name),
-          projects(name)
-        `)
-        .order('created_at', { ascending: false })
-        .limit(10)
-
       setMobilographers(mobilographersData || [])
       setProjects(projectsData || [])
-      setRecentRecords(recordsData || [])
       setLoading(false)
+      
+      // Bugun uchun avtomatik yuklash
+      fetchRecordsByFilter()
     } catch (error) {
       console.error('Error:', error)
       setLoading(false)
     }
+  }
+
+  const fetchRecordsByFilter = async () => {
+    try {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      
+      let startDate: Date
+      let endDate: Date = new Date()
+      endDate.setHours(23, 59, 59, 999)
+
+      switch (selectedTab) {
+        case 'today':
+          startDate = new Date(today)
+          break
+        case 'yesterday':
+          startDate = new Date(today)
+          startDate.setDate(today.getDate() - 1)
+          endDate = new Date(today)
+          endDate.setSeconds(endDate.getSeconds() - 1)
+          break
+        case 'week':
+          startDate = new Date(today)
+          const dayOfWeek = today.getDay()
+          const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+          startDate.setDate(today.getDate() - daysFromMonday)
+          break
+        case 'month':
+          startDate = new Date(today.getFullYear(), today.getMonth(), 1)
+          break
+        default:
+          startDate = new Date(today)
+      }
+
+      const startDateStr = startDate.toISOString().split('T')[0]
+      const endDateStr = endDate.toISOString().split('T')[0]
+
+      const { data: recordsData } = await supabase
+        .from('records')
+        .select(`
+          *,
+          mobilographers(id, name),
+          projects(id, name)
+        `)
+        .gte('date', startDateStr)
+        .lte('date', endDateStr)
+        .order('created_at', { ascending: false })
+
+      setRecentRecords(recordsData || [])
+      
+      // Guruhlash
+      groupRecords(recordsData || [])
+    } catch (error) {
+      console.error('Error fetching records:', error)
+    }
+  }
+
+  const groupRecords = (records: any[]) => {
+    const grouped = new Map<string, GroupedRecord>()
+
+    records.forEach(record => {
+      const key = `${record.project_id}-${record.mobilographer_id}`
+      
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          project: record.projects,
+          mobilographer: record.mobilographers,
+          records: [],
+          totalPost: 0,
+          totalStoris: 0,
+          totalSyomka: 0
+        })
+      }
+
+      const group = grouped.get(key)!
+      group.records.push(record)
+
+      const count = record.count || 1
+      if (record.type === 'editing') {
+        if (record.content_type === 'post') {
+          group.totalPost += count
+        } else if (record.content_type === 'storis') {
+          group.totalStoris += count
+        }
+      } else if (record.type === 'filming') {
+        group.totalSyomka += count
+      }
+    })
+
+    setGroupedRecords(Array.from(grouped.values()))
   }
 
   const formatTime = (seconds: number) => {
@@ -86,6 +183,15 @@ export default function KiritishPage() {
     setTimerSeconds(0)
   }
 
+  const getTabLabel = () => {
+    switch (selectedTab) {
+      case 'today': return 'Bugun'
+      case 'yesterday': return 'Kecha'
+      case 'week': return 'Bu hafta'
+      case 'month': return 'Bu oy'
+    }
+  }
+
   const handleDelete = async (id: string) => {
     if (deleteConfirm !== id) {
       setDeleteConfirm(id)
@@ -94,72 +200,38 @@ export default function KiritishPage() {
     }
 
     try {
-      console.log('Deleting record:', id)
-
-      // 1. Shu record bilan bog'liq videolarni topish
-      const { data: videos, error: fetchError } = await supabase
+      const { data: videos } = await supabase
         .from('videos')
         .select('*')
         .eq('record_id', id)
 
-      if (fetchError) {
-        console.error('Fetch error:', fetchError)
-        throw fetchError
-      }
-
-      console.log('Found videos:', videos)
-
-      // 2. Videolarni qaytarish yoki o'chirish
       if (videos && videos.length > 0) {
         for (const video of videos) {
           if (video.editing_status === 'completed') {
-            // Montaj qilingan videolarni pending qilish
-            const { error: updateError } = await supabase
+            await supabase
               .from('videos')
               .update({ 
                 editing_status: 'pending', 
                 record_id: null 
               })
               .eq('id', video.id)
-            
-            if (updateError) {
-              console.error('Update error:', updateError)
-              throw updateError
-            }
-            
-            console.log('Reverted video to pending:', video.id)
           } else {
-            // Syomka qilingan videolarni butunlay o'chirish
-            const { error: deleteVideoError } = await supabase
+            await supabase
               .from('videos')
               .delete()
               .eq('id', video.id)
-            
-            if (deleteVideoError) {
-              console.error('Delete video error:', deleteVideoError)
-              throw deleteVideoError
-            }
-            
-            console.log('Deleted video:', video.id)
           }
         }
       }
 
-      // 3. Record'ni o'chirish
-      const { error: deleteError } = await supabase
+      await supabase
         .from('records')
         .delete()
         .eq('id', id)
 
-      if (deleteError) {
-        console.error('Delete record error:', deleteError)
-        throw deleteError
-      }
-
-      console.log('Record deleted successfully')
-      alert('✅ Yozuv o\'chirildi va loyiha yangilandi!')
+      alert('✅ Yozuv o\'chirildi!')
       setDeleteConfirm(null)
-      fetchData()
+      fetchRecordsByFilter()
     } catch (error) {
       console.error('Delete error:', error)
       alert('❌ Xatolik: ' + (error as Error).message)
@@ -195,7 +267,6 @@ export default function KiritishPage() {
       if (recordError) throw recordError
 
       const recordId = createdRecord.id
-      console.log('Created record:', recordId)
 
       if (newRecord.type === 'editing') {
         const { data: pendingVideos } = await supabase
@@ -205,8 +276,6 @@ export default function KiritishPage() {
           .eq('editing_status', 'pending')
           .is('record_id', null)
           .limit(newRecord.count)
-
-        console.log('Found pending videos:', pendingVideos)
 
         if (pendingVideos && pendingVideos.length > 0) {
           const videoIds = pendingVideos.map(v => v.id)
@@ -218,8 +287,6 @@ export default function KiritishPage() {
               record_id: recordId
             })
             .in('id', videoIds)
-          
-          console.log('Updated videos to completed:', videoIds)
         } else {
           const videosToInsert = []
           for (let i = 0; i < newRecord.count; i++) {
@@ -233,7 +300,6 @@ export default function KiritishPage() {
             })
           }
           await supabase.from('videos').insert(videosToInsert)
-          console.log('Created new videos:', videosToInsert.length)
         }
       }
 
@@ -250,7 +316,6 @@ export default function KiritishPage() {
           })
         }
         await supabase.from('videos').insert(videosToInsert)
-        console.log('Created new videos:', videosToInsert.length)
       }
 
       alert(`✅ ${newRecord.count} ta ${newRecord.type === 'editing' ? newRecord.content_type === 'post' ? 'post' : 'storis' : 'syomka'} muvaffaqiyatli qo'shildi!`)
@@ -267,7 +332,7 @@ export default function KiritishPage() {
       })
       
       resetTimer()
-      fetchData()
+      fetchRecordsByFilter()
       setSubmitting(false)
     } catch (error) {
       console.error('Error:', error)
@@ -326,6 +391,7 @@ export default function KiritishPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="p-8 space-y-6">
+            {/* Form fields - same as before */}
             <div className="grid grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-semibold mb-2 text-gray-700">
@@ -526,63 +592,116 @@ export default function KiritishPage() {
         </div>
       </div>
 
+      {/* NEW: Filtered and Grouped Records */}
       <div className="max-w-4xl mx-auto">
-        <h2 className="text-2xl font-bold mb-4">📋 So'nggi Yozuvlar</h2>
-        
-        {recentRecords.length > 0 ? (
-          <div className="space-y-3">
-            {recentRecords.map((record) => (
-              <div key={record.id} className="bg-white rounded-xl p-4 shadow border border-gray-100 flex items-center justify-between hover:shadow-lg transition">
-                <div className="flex items-center gap-4">
-                  <div className="text-3xl">
-                    {record.type === 'editing' 
-                      ? record.content_type === 'post' ? '📄' : '📱'
-                      : '📹'}
-                  </div>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-2xl font-bold">📋 Kiritilgan Ishlar</h2>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-2 mb-4 overflow-x-auto">
+          {[
+            { key: 'today', label: '📅 Bugun', color: 'blue' },
+            { key: 'yesterday', label: '📅 Kecha', color: 'purple' },
+            { key: 'week', label: '📆 Bu hafta', color: 'green' },
+            { key: 'month', label: '📊 Bu oy', color: 'orange' }
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setSelectedTab(tab.key as any)}
+              className={`px-6 py-3 rounded-xl font-bold whitespace-nowrap transition-all ${
+                selectedTab === tab.key
+                  ? `bg-gradient-to-r from-${tab.color}-500 to-${tab.color}-600 text-white shadow-lg scale-105`
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Grouped Records */}
+        {groupedRecords.length > 0 ? (
+          <div className="space-y-4">
+            {groupedRecords.map((group, index) => (
+              <div key={index} className="bg-white rounded-xl p-6 shadow-lg border-2 border-gray-100">
+                <div className="flex items-center justify-between mb-4">
                   <div>
-                    <p className="font-bold text-lg">{record.mobilographers?.name}</p>
-                    <p className="text-sm text-gray-600">{record.projects?.name}</p>
-                    <p className="text-xs text-gray-400">
-                      {new Date(record.date).toLocaleDateString('uz-UZ')} • {record.time || 'Vaqt yo\'q'}
-                    </p>
-                    {record.notes && (
-                      <p className="text-sm text-gray-500 mt-1">{record.notes}</p>
-                    )}
+                    <h3 className="text-xl font-bold text-gray-800">{group.project?.name}</h3>
+                    <p className="text-sm text-gray-600">{group.mobilographer?.name}</p>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-bold text-gray-700">
+                      {group.records.length} marta
+                    </div>
+                    <div className="text-xs text-gray-500">jami yozuv</div>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="text-2xl font-bold text-gray-700">
-                    {record.count || 1}
-                  </div>
-                  <span className={`px-4 py-2 rounded-lg font-bold ${
-                    record.type === 'editing' 
-                      ? record.content_type === 'post'
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-pink-100 text-pink-700'
-                      : 'bg-blue-100 text-blue-700'
-                  }`}>
-                    {record.type === 'editing' 
-                      ? record.content_type === 'post' ? '📄 POST' : '📱 STORIS'
-                      : '📹 SYOMKA'}
-                  </span>
-                  <button
-                    onClick={() => handleDelete(record.id)}
-                    className={`transition-all ${
-                      deleteConfirm === record.id
-                        ? 'bg-red-500 text-white px-6 py-2 rounded-lg font-bold'
-                        : 'text-red-500 hover:text-red-700 text-3xl'
-                    }`}
-                  >
-                    {deleteConfirm === record.id ? 'Tasdiqlash?' : '🗑️'}
-                  </button>
+
+                {/* Summary */}
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  {group.totalPost > 0 && (
+                    <div className="bg-green-50 border-2 border-green-200 rounded-lg p-3 text-center">
+                      <div className="text-3xl font-bold text-green-600">{group.totalPost}</div>
+                      <div className="text-xs text-green-700">📄 Post</div>
+                    </div>
+                  )}
+                  {group.totalStoris > 0 && (
+                    <div className="bg-pink-50 border-2 border-pink-200 rounded-lg p-3 text-center">
+                      <div className="text-3xl font-bold text-pink-600">{group.totalStoris}</div>
+                      <div className="text-xs text-pink-700">📱 Storis</div>
+                    </div>
+                  )}
+                  {group.totalSyomka > 0 && (
+                    <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3 text-center">
+                      <div className="text-3xl font-bold text-blue-600">{group.totalSyomka}</div>
+                      <div className="text-xs text-blue-700">📹 Syomka</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Individual Records */}
+                <div className="space-y-2">
+                  {group.records.map(record => (
+                    <div key={record.id} className="bg-gray-50 rounded-lg p-3 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="text-2xl">
+                          {record.type === 'editing' 
+                            ? record.content_type === 'post' ? '📄' : '📱'
+                            : '📹'}
+                        </div>
+                        <div>
+                          <p className="font-semibold">
+                            {record.count || 1}x {record.type === 'editing' 
+                              ? record.content_type === 'post' ? 'Post' : 'Storis'
+                              : 'Syomka'}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {new Date(record.date).toLocaleDateString('uz-UZ')} • {record.time || '---'}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDelete(record.id)}
+                        className={`transition-all ${
+                          deleteConfirm === record.id
+                            ? 'bg-red-500 text-white px-4 py-2 rounded-lg font-bold text-sm'
+                            : 'text-red-500 hover:text-red-700 text-2xl'
+                        }`}
+                      >
+                        {deleteConfirm === record.id ? 'Tasdiqlash?' : '🗑️'}
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <div className="text-center py-12 bg-gray-50 rounded-xl">
-            <div className="text-5xl mb-3">📋</div>
-            <p className="text-gray-500">Hozircha yozuvlar yo'q</p>
+          <div className="text-center py-16 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
+            <div className="text-7xl mb-4">📋</div>
+            <p className="text-gray-500 text-xl font-medium mb-2">{getTabLabel()} uchun ma'lumot yo'q</p>
+            <p className="text-gray-400 text-sm">Yangi ish kiritganingizda bu yerda ko'rinadi</p>
           </div>
         )}
       </div>
