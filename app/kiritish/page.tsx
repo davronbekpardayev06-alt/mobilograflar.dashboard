@@ -22,7 +22,6 @@ export default function KiritishPage() {
   const [timerSeconds, setTimerSeconds] = useState(0)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   
-  // YANGI FILTER STATE
   const [filterType, setFilterType] = useState<'today' | 'yesterday' | 'month'>('today')
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear())
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1)
@@ -112,33 +111,21 @@ export default function KiritishPage() {
       let startDate: Date
       let endDate: Date
 
-      switch (filterType) {
-        case 'today':
-          startDate = new Date(today)
-          startDate.setHours(0, 0, 0, 0)
-          endDate = new Date(today)
-          endDate.setHours(23, 59, 59, 999)
-          break
-        
-        case 'yesterday':
-          startDate = new Date(today)
-          startDate.setDate(today.getDate() - 1)
-          startDate.setHours(0, 0, 0, 0)
-          endDate = new Date(today)
-          endDate.setDate(today.getDate() - 1)
-          endDate.setHours(23, 59, 59, 999)
-          break
-        
-        case 'month':
-          startDate = new Date(selectedYear, selectedMonth - 1, 1)
-          endDate = new Date(selectedYear, selectedMonth, 0, 23, 59, 59, 999)
-          break
-        
-        default:
-          startDate = new Date(today)
-          startDate.setHours(0, 0, 0, 0)
-          endDate = new Date(today)
-          endDate.setHours(23, 59, 59, 999)
+      if (filterType === 'today') {
+        startDate = new Date(today)
+        startDate.setHours(0, 0, 0, 0)
+        endDate = new Date(today)
+        endDate.setHours(23, 59, 59, 999)
+      } else if (filterType === 'yesterday') {
+        startDate = new Date(today)
+        startDate.setDate(today.getDate() - 1)
+        startDate.setHours(0, 0, 0, 0)
+        endDate = new Date(today)
+        endDate.setDate(today.getDate() - 1)
+        endDate.setHours(23, 59, 59, 999)
+      } else {
+        startDate = new Date(selectedYear, selectedMonth - 1, 1)
+        endDate = new Date(selectedYear, selectedMonth, 0, 23, 59, 59, 999)
       }
 
       const startDateStr = startDate.toISOString().split('T')[0]
@@ -205,11 +192,9 @@ export default function KiritishPage() {
   }
 
   const getFilterLabel = () => {
-    switch (filterType) {
-      case 'today': return 'Bugun'
-      case 'yesterday': return 'Kecha'
-      case 'month': return `${getMonthName(selectedMonth)} ${selectedYear}`
-    }
+    if (filterType === 'today') return 'Bugun'
+    if (filterType === 'yesterday') return 'Kecha'
+    return `${getMonthName(selectedMonth)} ${selectedYear}`
   }
 
   const formatTime = (seconds: number) => {
@@ -395,7 +380,6 @@ export default function KiritishPage() {
         ➕ Yangi Yozuv
       </h1>
 
-      {/* FORM - Same as before, keeping all the form code */}
       <div className="max-w-4xl mx-auto">
         <div className="bg-white rounded-3xl shadow-2xl border-2 border-gray-100 overflow-hidden">
           <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-6 text-white">
@@ -629,16 +613,13 @@ export default function KiritishPage() {
         </div>
       </div>
 
-      {/* ===== YANGI FILTER SECTION ===== */}
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-bold">📋 Kiritilgan Ishlar</h2>
         </div>
 
-        {/* Filter Section */}
         <div className="bg-white rounded-2xl p-6 shadow-lg border-2 border-gray-100 mb-4">
           <div className="flex items-center gap-4 mb-4">
-            {/* Bugun */}
             <button
               onClick={() => setFilterType('today')}
               className={`px-6 py-3 rounded-xl font-bold whitespace-nowrap transition-all ${
@@ -650,7 +631,6 @@ export default function KiritishPage() {
               📅 Bugun
             </button>
 
-            {/* Kecha */}
             <button
               onClick={() => setFilterType('yesterday')}
               className={`px-6 py-3 rounded-xl font-bold whitespace-nowrap transition-all ${
@@ -662,7 +642,6 @@ export default function KiritishPage() {
               📅 Kecha
             </button>
 
-            {/* Oy bo'yicha */}
             <button
               onClick={() => setFilterType('month')}
               className={`px-6 py-3 rounded-xl font-bold whitespace-nowrap transition-all ${
@@ -675,10 +654,8 @@ export default function KiritishPage() {
             </button>
           </div>
 
-          {/* Oy va Yil tanlash (faqat month bo'lganda) */}
           {filterType === 'month' && (
             <div className="grid grid-cols-2 gap-4 mt-4">
-              {/* Yil */}
               <div>
                 <label className="block text-sm font-semibold mb-2 text-gray-700">
                   📆 Yil
@@ -694,7 +671,6 @@ export default function KiritishPage() {
                 </select>
               </div>
 
-              {/* Oy */}
               <div>
                 <label className="block text-sm font-semibold mb-2 text-gray-700">
                   📅 Oy
@@ -712,7 +688,6 @@ export default function KiritishPage() {
             </div>
           )}
 
-          {/* Ko'rsatilgan davr */}
           <div className="mt-4 bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-xl p-4">
             <div className="flex items-center gap-3">
               <span className="text-3xl">📊</span>
@@ -724,7 +699,6 @@ export default function KiritishPage() {
           </div>
         </div>
 
-        {/* Grouped Records */}
         {groupedRecords.length > 0 ? (
           <div className="space-y-4">
             {groupedRecords.map((group, index) => (
@@ -742,7 +716,6 @@ export default function KiritishPage() {
                   </div>
                 </div>
 
-                {/* Summary */}
                 <div className="grid grid-cols-3 gap-3 mb-4">
                   {group.totalPost > 0 && (
                     <div className="bg-green-50 border-2 border-green-200 rounded-lg p-3 text-center">
@@ -764,7 +737,6 @@ export default function KiritishPage() {
                   )}
                 </div>
 
-                {/* Individual Records */}
                 <div className="space-y-2">
                   {group.records.map(record => (
                     <div key={record.id} className="bg-gray-50 rounded-lg p-3 flex items-center justify-between">
