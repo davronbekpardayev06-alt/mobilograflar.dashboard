@@ -13,6 +13,13 @@ interface WeeklyData {
   weekEnd: string
 }
 
+interface WeekInfo {
+  weekStart: Date
+  weekEnd: Date
+  label: string
+  dateRange: string
+}
+
 export default function HaftalikPage() {
   const [weeklyData, setWeeklyData] = useState<WeeklyData>({
     totalMontaj: 0,
@@ -36,7 +43,6 @@ export default function HaftalikPage() {
   }, [selectedWeek])
 
   const generateAvailableWeeks = () => {
-    // O'tgan 8 haftani yaratish
     const weeks = []
     
     // Joriy hafta (hali tugamagan)
@@ -44,7 +50,9 @@ export default function HaftalikPage() {
     weeks.push({
       value: 0,
       label: '📅 Joriy hafta (hali tugamagan)',
-      ...currentWeekInfo
+      weekStart: currentWeekInfo.weekStart,
+      weekEnd: currentWeekInfo.weekEnd,
+      dateRange: currentWeekInfo.dateRange
     })
     
     // O'tgan haftalar (to'liq tugagan)
@@ -53,21 +61,23 @@ export default function HaftalikPage() {
       weeks.push({
         value: -i,
         label: i === 1 ? '📅 O\'tgan hafta' : `📅 ${weekInfo.label}`,
-        ...weekInfo
+        weekStart: weekInfo.weekStart,
+        weekEnd: weekInfo.weekEnd,
+        dateRange: weekInfo.dateRange
       })
     }
     
     setAvailableWeeks(weeks)
   }
 
-  const formatDate = (date: Date) => {
+  const formatDate = (date: Date): string => {
     const day = date.getDate()
     const month = date.getMonth() + 1
     const year = date.getFullYear()
     return `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`
   }
 
-  const getWeekRange = (weeksAgo: number) => {
+  const getWeekRange = (weeksAgo: number): WeekInfo => {
     const today = new Date()
     
     // Bugungi kunni haftaning qaysi kuniga to'g'ri kelishini aniqlash
@@ -102,7 +112,7 @@ export default function HaftalikPage() {
     const startMonth = monthNames[weekStart.getMonth()]
     const endMonth = monthNames[weekEnd.getMonth()]
     
-    let label
+    let label: string
     if (weeksAgo === 0) {
       label = 'Joriy hafta'
     } else if (weeksAgo === -1) {
