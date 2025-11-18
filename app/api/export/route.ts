@@ -171,7 +171,6 @@ export async function GET() {
         }
       })
 
-      // Progress rangi
       const progressCell = projectsSheet.getCell(row, 6)
       progressCell.font = { bold: true, size: 12 }
       if (progress >= 100) {
@@ -210,7 +209,6 @@ export async function GET() {
     ratingTitle.alignment = { horizontal: 'center', vertical: 'middle' }
     ratingSheet.getRow(1).height = 40
 
-    // Ball hisoblash
     const mobilographerScores = new Map()
     const mobilographerDetails = new Map()
     
@@ -264,7 +262,6 @@ export async function GET() {
       const rank = index + 1
       const details = mobilographerDetails.get(name) || { post: 0, storis: 0, syomka: 0 }
 
-      // O'rin
       const rankCell = ratingSheet.getCell(row, 1)
       rankCell.alignment = { horizontal: 'center', vertical: 'middle' }
       rankCell.font = { bold: true, size: 14 }
@@ -282,19 +279,16 @@ export async function GET() {
         rankCell.value = rank
       }
 
-      // Mobilograf
       const nameCell = ratingSheet.getCell(row, 2)
       nameCell.value = name
       nameCell.font = { bold: true, size: 12 }
       nameCell.alignment = { horizontal: 'left', vertical: 'middle' }
 
-      // Ball
       const scoreCell = ratingSheet.getCell(row, 3)
       scoreCell.value = score
       scoreCell.alignment = { horizontal: 'center', vertical: 'middle' }
       scoreCell.font = { bold: true, size: 14, color: { argb: 'FF059669' } }
 
-      // Post, Storis, Syomka
       ratingSheet.getCell(row, 4).value = details.post
       ratingSheet.getCell(row, 4).alignment = { horizontal: 'center', vertical: 'middle' }
       ratingSheet.getCell(row, 5).value = details.storis
@@ -302,7 +296,6 @@ export async function GET() {
       ratingSheet.getCell(row, 6).value = details.syomka
       ratingSheet.getCell(row, 6).alignment = { horizontal: 'center', vertical: 'middle' }
 
-      // Borders
       for (let col = 1; col <= 6; col++) {
         const cell = ratingSheet.getCell(row, col)
         cell.border = {
@@ -394,7 +387,6 @@ export async function GET() {
           right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
         }
 
-        // Ish turi rangi
         if (col === 6) {
           cell.font = { bold: true, color: { argb: typeColor } }
         }
