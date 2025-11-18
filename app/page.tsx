@@ -15,7 +15,6 @@ export default function Home() {
   const [projectsStatus, setProjectsStatus] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   
-  // YANGI FILTER STATE
   const [filterType, setFilterType] = useState<'today' | 'yesterday' | 'month'>('month')
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear())
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1)
@@ -23,10 +22,11 @@ export default function Home() {
 
   useEffect(() => {
     loadAvailableYears()
+    fetchGeneralData() // UMUMIY ma'lumotlar (bir marta)
   }, [])
 
   useEffect(() => {
-    fetchData()
+    fetchFilteredData() // Filterga bog'liq ma'lumotlar
   }, [filterType, selectedYear, selectedMonth])
 
   const loadAvailableYears = async () => {
@@ -70,8 +70,34 @@ export default function Home() {
     return `${getMonthName(selectedMonth)} ${selectedYear}`
   }
 
-  const fetchData = async () => {
+  // UMUMIY MA'LUMOTLAR - bir marta yuklanadi, o'zgarmasin!
+  const fetchGeneralData = async () => {
     try {
+      // UMUMIY mobilograflar soni
+      const { data: mobilographers } = await supabase
+        .from('mobilographers')
+        .select('*')
+
+      // UMUMIY loyihalar soni
+      const { data: projects } = await supabase
+        .from('projects')
+        .select('*')
+
+      setStats(prev => ({
+        ...prev,
+        mobilographers: mobilographers?.length || 0,
+        projects: projects?.length || 0
+      }))
+    } catch (error) {
+      console.error('Error fetching general data:', error)
+    }
+  }
+
+  // FILTERGA BOG'LIQ MA'LUMOTLAR
+  const fetchFilteredData = async () => {
+    try {
+      setLoading(true)
+      
       // DATE RANGE ni hisoblash
       const today = new Date()
       let startDate: Date
@@ -103,16 +129,6 @@ export default function Home() {
         .select('*, mobilographers(id, name)')
         .gte('date', startDateStr)
         .lte('date', endDateStr)
-
-      // Tanlangan davrdagi FAOL MOBILOGRAFLAR
-      const activeMobilographers = new Set(
-        periodRecords?.map(r => r.mobilographer_id) || []
-      )
-
-      // Tanlangan davrdagi FAOL LOYIHALAR
-      const activeProjects = new Set(
-        periodRecords?.map(r => r.project_id) || []
-      )
 
       // Tanlangan davrdagi VIDEOLAR soni
       const totalVideos = periodRecords?.reduce((sum, record) => {
@@ -196,12 +212,11 @@ export default function Home() {
         return b.progress - a.progress
       })
 
-      setStats({
-        mobilographers: activeMobilographers.size,
-        projects: activeProjects.size,
+      setStats(prev => ({
+        ...prev,
         totalVideos,
         todayWork: todayRecords?.length || 0
-      })
+      }))
 
       setRecentActivity(recentRecords || [])
       setProjectsStatus(projectsWithStatus || [])
@@ -249,7 +264,7 @@ export default function Home() {
 
   return (
     <div className="space-y-6 animate-slide-in">
-      {/* YANGI FILTER SECTION */}
+      {/* FILTER SECTION */}
       <div className="bg-white rounded-2xl p-6 shadow-lg border-2 border-gray-100">
         <h2 className="text-xl font-bold mb-4">📊 Davr Tanlash</h2>
         
@@ -341,7 +356,7 @@ export default function Home() {
             <span className="text-lg opacity-90">Mobilograflar</span>
           </div>
           <div className="text-5xl font-bold">{stats.mobilographers}</div>
-          <div className="text-xs opacity-80 mt-2">{getFilterLabel()}</div>
+          <div className="text-xs opacity-80 mt-2">Umumiy soni</div>
         </div>
 
         <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-2xl p-6 shadow-lg card-hover">
@@ -350,7 +365,7 @@ export default function Home() {
             <span className="text-lg opacity-90">Loyihalar</span>
           </div>
           <div className="text-5xl font-bold">{stats.projects}</div>
-          <div className="text-xs opacity-80 mt-2">{getFilterLabel()}</div>
+          <div className="text-xs opacity-80 mt-2">Umumiy soni</div>
         </div>
 
         <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl p-6 shadow-lg card-hover">
