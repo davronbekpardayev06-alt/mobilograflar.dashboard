@@ -1,225 +1,28 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 
-export default function Home() {
-  const [stats, setStats] = useState({
-    mobilographers: 0,
-    projects: 0,
-    totalVideos: 0,
-    todayWork: 0
-  })
-  const [recentActivity, setRecentActivity] = useState<any[]>([])
-  const [projectsStatus, setProjectsStatus] = useState<any[]>([])
+export default function DashboardPage() {
+  const [projects, setProjects] = useState<any[]>([])
+  const [mobilographers, setMobilographers] = useState<any[]>([])
+  const [todayWorkload, setTodayWorkload] = useState<any[]>([])
+  const [weeklyStats, setWeeklyStats] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  
-  const [filterType, setFilterType] = useState<'today' | 'yesterday' | 'month'>('month')
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear())
-  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1)
-  const [availableYears, setAvailableYears] = useState<number[]>([])
 
   useEffect(() => {
-    loadAvailableYears()
-    fetchGeneralData() // UMUMIY ma'lumotlar (bir marta)
+    fetchData()
   }, [])
 
-  useEffect(() => {
-    fetchFilteredData() // Filterga bog'liq ma'lumotlar
-  }, [filterType, selectedYear, selectedMonth])
-
-  const loadAvailableYears = async () => {
+  const fetchData = async () => {
     try {
-      const { data: records } = await supabase
-        .from('records')
-        .select('date')
-        .order('date', { ascending: false })
-
-      if (!records || records.length === 0) {
-        setAvailableYears([new Date().getFullYear()])
-        return
-      }
-
-      const years = new Set<number>()
-      records.forEach(record => {
-        if (record.date) {
-          const year = new Date(record.date).getFullYear()
-          years.add(year)
-        }
-      })
-
-      setAvailableYears(Array.from(years).sort((a, b) => b - a))
-    } catch (error) {
-      console.error('Error loading years:', error)
-      setAvailableYears([new Date().getFullYear()])
-    }
-  }
-
-  const getMonthName = (monthNum: number) => {
-    const months = [
-      'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun',
-      'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'
-    ]
-    return months[monthNum - 1]
-  }
-
-  const getFilterLabel = () => {
-    if (filterType === 'today') return 'Bugun'
-    if (filterType === 'yesterday') return 'Kecha'
-    return `${getMonthName(selectedMonth)} ${selectedYear}`
-  }
-
-  // UMUMIY MA'LUMOTLAR - bir marta yuklanadi, o'zgarmasin!
-  const fetchGeneralData = async () => {
-    try {
-      // UMUMIY mobilograflar soni
-      const { data: mobilographers } = await supabase
-        .from('mobilographers')
-        .select('*')
-
-      // UMUMIY loyihalar soni
-      const { data: projects } = await supabase
-        .from('projects')
-        .select('*')
-
-      setStats(prev => ({
-        ...prev,
-        mobilographers: mobilographers?.length || 0,
-        projects: projects?.length || 0
-      }))
-    } catch (error) {
-      console.error('Error fetching general data:', error)
-    }
-  }
-
-  // FILTERGA BOG'LIQ MA'LUMOTLAR
-  const fetchFilteredData = async () => {
-    try {
-      setLoading(true)
-      
-      // DATE RANGE ni hisoblash
-      const today = new Date()
-      let startDate: Date
-      let endDate: Date
-
-      if (filterType === 'today') {
-        startDate = new Date(today)
-        startDate.setHours(0, 0, 0, 0)
-        endDate = new Date(today)
-        endDate.setHours(23, 59, 59, 999)
-      } else if (filterType === 'yesterday') {
-        startDate = new Date(today)
-        startDate.setDate(today.getDate() - 1)
-        startDate.setHours(0, 0, 0, 0)
-        endDate = new Date(today)
-        endDate.setDate(today.getDate() - 1)
-        endDate.setHours(23, 59, 59, 999)
-      } else {
-        startDate = new Date(selectedYear, selectedMonth - 1, 1)
-        endDate = new Date(selectedYear, selectedMonth, 0, 23, 59, 59, 999)
-      }
-
-      const startDateStr = startDate.toISOString().split('T')[0]
-      const endDateStr = endDate.toISOString().split('T')[0]
-
-      // TANLANGAN DAVR uchun RECORDS
-      const { data: periodRecords } = await supabase
-        .from('records')
-        .select('*, mobilographers(id, name)')
-        .gte('date', startDateStr)
-        .lte('date', endDateStr)
-
-      // Tanlangan davrdagi VIDEOLAR soni
-      const totalVideos = periodRecords?.reduce((sum, record) => {
-        return sum + (record.count || 1)
-      }, 0) || 0
-
-      // Bugungi ish (har doim bugungi)
-      const todayStr = new Date().toISOString().split('T')[0]
-      const { data: todayRecords } = await supabase
-        .from('records')
-        .select('*')
-        .eq('date', todayStr)
-
-      // OXIRGI 5 FAOLIYAT (tanlangan davrdan)
-      const { data: recentRecords } = await supabase
-        .from('records')
-        .select(`
-          *,
-          mobilographers(name),
-          projects(name)
-        `)
-        .gte('date', startDateStr)
-        .lte('date', endDateStr)
-        .order('created_at', { ascending: false })
-        .limit(5)
-
-      // LOYIHALAR HOLATI (tanlangan oy uchun)
-      const { data: projects } = await supabase
-        .from('projects')
-        .select(`
-          *,
-          mobilographers(name),
-          videos (
-            id,
-            editing_status,
-            filming_status,
-            content_type,
-            task_type,
-            deadline,
-            created_at,
-            record_id
-          )
-        `)
-
-      const projectsWithStatus = projects?.map(project => {
-        // Tanlangan oyning videolarini hisoblash
-        const monthVideos = project.videos?.filter((v: any) => {
-          if (v.task_type !== 'montaj') return false
-          if (v.content_type !== 'post') return false
-          if (v.editing_status !== 'completed') return false
-          if (!v.record_id) return false
-          
-          const videoDate = new Date(v.created_at)
-          return videoDate.getMonth() === selectedMonth - 1 && 
-                 videoDate.getFullYear() === selectedYear
-        })
-        
-        const completed = monthVideos?.length || 0
-        const target = project.monthly_target || 12
-        const progress = Math.round((completed / target) * 100)
-        
-        const nearestDeadline = project.videos
-          ?.filter((v: any) => v.deadline && v.editing_status !== 'completed')
-          .sort((a: any, b: any) => 
-            new Date(a.deadline).getTime() - new Date(b.deadline).getTime()
-          )[0]
-
-        return {
-          ...project,
-          completed,
-          target,
-          progress,
-          nearestDeadline: nearestDeadline?.deadline
-        }
-      }).sort((a, b) => {
-        if (a.nearestDeadline && !b.nearestDeadline) return -1
-        if (!a.nearestDeadline && b.nearestDeadline) return 1
-        if (a.nearestDeadline && b.nearestDeadline) {
-          return new Date(a.nearestDeadline).getTime() - new Date(b.nearestDeadline).getTime()
-        }
-        return b.progress - a.progress
-      })
-
-      setStats(prev => ({
-        ...prev,
-        totalVideos,
-        todayWork: todayRecords?.length || 0
-      }))
-
-      setRecentActivity(recentRecords || [])
-      setProjectsStatus(projectsWithStatus || [])
+      await Promise.all([
+        fetchProjects(),
+        fetchMobilographers(),
+        fetchTodayWorkload(),
+        fetchWeeklyStats()
+      ])
       setLoading(false)
     } catch (error) {
       console.error('Error:', error)
@@ -227,28 +30,188 @@ export default function Home() {
     }
   }
 
-  const getDeadlineInfo = (deadline: string | null) => {
-    if (!deadline) return null
-    
+  const fetchProjects = async () => {
     const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const deadlineDate = new Date(deadline)
-    deadlineDate.setHours(0, 0, 0, 0)
-    const diffDays = Math.ceil((deadlineDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-    
-    if (diffDays < 0) {
-      return { text: `${Math.abs(diffDays)} kun kechikdi`, color: 'text-red-600', bgColor: 'bg-red-50', borderColor: 'border-red-400' }
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1)
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+
+    const { data: projectsData } = await supabase
+      .from('projects')
+      .select('*, mobilographers(name)')
+      .order('name')
+
+    const projectsWithProgress = await Promise.all(
+      (projectsData || []).map(async (project) => {
+        const { data: videos } = await supabase
+          .from('videos')
+          .select('*')
+          .eq('project_id', project.id)
+          .gte('created_at', firstDay.toISOString())
+          .lte('created_at', lastDay.toISOString())
+
+        const completedPosts = videos?.filter(
+          v => v.record_id !== null && 
+               v.editing_status === 'completed' && 
+               v.content_type === 'post' && 
+               v.task_type === 'montaj'
+        ).length || 0
+
+        const progress = project.monthly_target > 0 
+          ? Math.round((completedPosts / project.monthly_target) * 100)
+          : 0
+
+        return {
+          ...project,
+          completed: completedPosts,
+          progress
+        }
+      })
+    )
+
+    setProjects(projectsWithProgress)
+  }
+
+  const fetchMobilographers = async () => {
+    const { data } = await supabase
+      .from('mobilographers')
+      .select('*')
+      .order('name')
+
+    setMobilographers(data || [])
+  }
+
+  const fetchTodayWorkload = async () => {
+    const today = new Date().toISOString().split('T')[0]
+
+    const { data: records } = await supabase
+      .from('records')
+      .select(`
+        *,
+        mobilographers(id, name),
+        projects(id, name)
+      `)
+      .eq('date', today)
+
+    const workloadByMobilographer = mobilographers.map(mob => {
+      const mobRecords = records?.filter(r => r.mobilographer_id === mob.id) || []
+      
+      let totalDuration = 0
+      let totalPost = 0
+      let totalStoris = 0
+      let totalSyomka = 0
+      
+      mobRecords.forEach(record => {
+        if (record.duration_minutes) {
+          totalDuration += record.duration_minutes
+        }
+        const count = record.count || 1
+        if (record.type === 'editing') {
+          if (record.content_type === 'post') totalPost += count
+          else if (record.content_type === 'storis') totalStoris += count
+        } else if (record.type === 'filming') {
+          totalSyomka += count
+        }
+      })
+
+      const hours = totalDuration / 60
+      let status = 'none'
+      let statusLabel = 'Ish yo\'q'
+      let statusColor = 'gray'
+      let recommendation = ''
+
+      if (hours === 0) {
+        status = 'none'
+        statusLabel = 'Ish yo\'q'
+        statusColor = 'gray'
+        recommendation = 'Yangi vazifa tayinlang'
+      } else if (hours < 3) {
+        status = 'light'
+        statusLabel = 'Engil yuk'
+        statusColor = 'green'
+        recommendation = 'Qo\'shimcha vazifa berish mumkin'
+      } else if (hours <= 7) {
+        status = 'optimal'
+        statusLabel = 'Optimal'
+        statusColor = 'blue'
+        recommendation = 'Yaxshi ish bajarilmoqda'
+      } else if (hours <= 10) {
+        status = 'heavy'
+        statusLabel = 'Og\'ir yuk'
+        statusColor = 'orange'
+        recommendation = 'Ko\'p vazifa, nazorat qiling'
+      } else {
+        status = 'overloaded'
+        statusLabel = 'Haddan tashqari'
+        statusColor = 'red'
+        recommendation = 'Vazifalarni qayta taqsimlang!'
+      }
+
+      return {
+        mobilographer: mob,
+        totalDuration,
+        totalPost,
+        totalStoris,
+        totalSyomka,
+        hours,
+        status,
+        statusLabel,
+        statusColor,
+        recommendation,
+        records: mobRecords
+      }
+    })
+
+    setTodayWorkload(workloadByMobilographer.sort((a, b) => b.totalDuration - a.totalDuration))
+  }
+
+  const fetchWeeklyStats = async () => {
+    const today = new Date()
+    const stats = []
+
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(today)
+      date.setDate(today.getDate() - i)
+      const dateStr = date.toISOString().split('T')[0]
+
+      const { data: records } = await supabase
+        .from('records')
+        .select('*')
+        .eq('date', dateStr)
+
+      let totalDuration = 0
+      let totalWorks = 0
+
+      records?.forEach(record => {
+        if (record.duration_minutes) {
+          totalDuration += record.duration_minutes
+        }
+        totalWorks += record.count || 1
+      })
+
+      stats.push({
+        date: dateStr,
+        day: date.getDate(),
+        weekday: date.toLocaleDateString('uz-UZ', { weekday: 'short' }),
+        totalDuration,
+        totalWorks,
+        isToday: dateStr === today.toISOString().split('T')[0]
+      })
     }
-    if (diffDays === 0) {
-      return { text: 'Bugun!', color: 'text-red-600', bgColor: 'bg-red-50', borderColor: 'border-red-400' }
+
+    setWeeklyStats(stats)
+  }
+
+  const formatDuration = (minutes: number): string => {
+    if (!minutes) return '0 daqiqa'
+    const hours = Math.floor(minutes / 60)
+    const mins = minutes % 60
+    if (hours > 0 && mins > 0) {
+      return `${hours}s ${mins}d`
+    } else if (hours > 0) {
+      return `${hours} soat`
+    } else {
+      return `${mins} daqiqa`
     }
-    if (diffDays <= 3) {
-      return { text: `${diffDays} kun qoldi`, color: 'text-orange-600', bgColor: 'bg-orange-50', borderColor: 'border-orange-400' }
-    }
-    if (diffDays <= 7) {
-      return { text: `${diffDays} kun qoldi`, color: 'text-yellow-600', bgColor: 'bg-yellow-50', borderColor: 'border-yellow-400' }
-    }
-    return { text: `${diffDays} kun qoldi`, color: 'text-green-600', bgColor: 'bg-green-50', borderColor: 'border-green-400' }
   }
 
   if (loading) {
@@ -262,309 +225,280 @@ export default function Home() {
     )
   }
 
+  const todayTotalDuration = todayWorkload.reduce((sum, w) => sum + w.totalDuration, 0)
+  const todayTotalWorks = todayWorkload.reduce((sum, w) => sum + w.totalPost + w.totalStoris + w.totalSyomka, 0)
+  const activeMobilographers = todayWorkload.filter(w => w.totalDuration > 0).length
+
   return (
     <div className="space-y-6 animate-slide-in">
-      {/* FILTER SECTION */}
-      <div className="bg-white rounded-2xl p-6 shadow-lg border-2 border-gray-100">
-        <h2 className="text-xl font-bold mb-4">📊 Davr Tanlash</h2>
-        
-        <div className="flex items-center gap-4 mb-4">
-          <button
-            onClick={() => setFilterType('today')}
-            className={`px-6 py-3 rounded-xl font-bold whitespace-nowrap transition-all ${
-              filterType === 'today'
-                ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg scale-105'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            📅 Bugun
-          </button>
-
-          <button
-            onClick={() => setFilterType('yesterday')}
-            className={`px-6 py-3 rounded-xl font-bold whitespace-nowrap transition-all ${
-              filterType === 'yesterday'
-                ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg scale-105'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            📅 Kecha
-          </button>
-
-          <button
-            onClick={() => setFilterType('month')}
-            className={`px-6 py-3 rounded-xl font-bold whitespace-nowrap transition-all ${
-              filterType === 'month'
-                ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg scale-105'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            📊 Oy bo'yicha
-          </button>
-        </div>
-
-        {filterType === 'month' && (
-          <div className="grid grid-cols-2 gap-4 mt-4">
-            <div>
-              <label className="block text-sm font-semibold mb-2 text-gray-700">
-                📆 Yil
-              </label>
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none font-semibold"
-              >
-                {availableYears.map(year => (
-                  <option key={year} value={year}>{year} yil</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold mb-2 text-gray-700">
-                📅 Oy
-              </label>
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all outline-none font-semibold"
-              >
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(month => (
-                  <option key={month} value={month}>{getMonthName(month)}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        )}
-
-        <div className="mt-4 bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-xl p-4">
-          <div className="flex items-center gap-3">
-            <span className="text-3xl">📊</span>
-            <div>
-              <p className="text-sm text-gray-600 font-medium">Ko'rsatilgan davr:</p>
-              <p className="text-xl font-bold text-gray-800">{getFilterLabel()}</p>
-            </div>
-          </div>
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+          🏠 Asosiy Sahifa
+        </h1>
+        <div className="text-right">
+          <p className="text-sm text-gray-500">
+            {new Date().toLocaleDateString('uz-UZ', { weekday: 'long' })}
+          </p>
+          <p className="text-lg font-bold text-gray-700">
+            {new Date().toLocaleDateString('uz-UZ', { year: 'numeric', month: 'long', day: 'numeric' })}
+          </p>
         </div>
       </div>
 
-      {/* Statistika kartochkalari */}
+      {/* Today's Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl p-6 shadow-lg card-hover">
-          <div className="flex items-center gap-3 mb-3">
-            <span className="text-4xl">👥</span>
-            <span className="text-lg opacity-90">Mobilograflar</span>
-          </div>
-          <div className="text-5xl font-bold">{stats.mobilographers}</div>
-          <div className="text-xs opacity-80 mt-2">Umumiy soni</div>
-        </div>
-
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-2xl p-6 shadow-lg card-hover">
-          <div className="flex items-center gap-3 mb-3">
-            <span className="text-4xl">🎬</span>
-            <span className="text-lg opacity-90">Loyihalar</span>
-          </div>
-          <div className="text-5xl font-bold">{stats.projects}</div>
-          <div className="text-xs opacity-80 mt-2">Umumiy soni</div>
-        </div>
-
-        <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl p-6 shadow-lg card-hover">
-          <div className="flex items-center gap-3 mb-3">
-            <span className="text-4xl">🎥</span>
-            <span className="text-lg opacity-90">Jami Ishlar</span>
-          </div>
-          <div className="text-5xl font-bold">{stats.totalVideos}</div>
-          <div className="text-xs opacity-80 mt-2">{getFilterLabel()}</div>
-        </div>
-
-        <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-2xl p-6 shadow-lg card-hover">
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-3">
             <span className="text-4xl">⏰</span>
-            <span className="text-lg opacity-90">Bugun</span>
+            <div>
+              <h3 className="font-bold text-lg">Jami Vaqt</h3>
+              <p className="text-xs text-gray-600">Bugun</p>
+            </div>
           </div>
-          <div className="text-5xl font-bold">{stats.todayWork}</div>
-          <div className="text-xs opacity-80 mt-2">Har doim bugungi</div>
+          <div className="text-4xl font-bold text-blue-600">
+            {Math.round(todayTotalDuration / 60)}s
+          </div>
+          <div className="text-sm text-gray-600 mt-1">
+            {formatDuration(todayTotalDuration)}
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-2xl p-6">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-4xl">✅</span>
+            <div>
+              <h3 className="font-bold text-lg">Jami Ishlar</h3>
+              <p className="text-xs text-gray-600">Bugun</p>
+            </div>
+          </div>
+          <div className="text-4xl font-bold text-green-600">
+            {todayTotalWorks}
+          </div>
+          <div className="text-sm text-gray-600 mt-1">
+            Bajarildi
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-200 rounded-2xl p-6">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-4xl">👥</span>
+            <div>
+              <h3 className="font-bold text-lg">Aktiv</h3>
+              <p className="text-xs text-gray-600">Mobilograflar</p>
+            </div>
+          </div>
+          <div className="text-4xl font-bold text-purple-600">
+            {activeMobilographers}/{mobilographers.length}
+          </div>
+          <div className="text-sm text-gray-600 mt-1">
+            Ishlamoqda
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-orange-50 to-yellow-50 border-2 border-orange-200 rounded-2xl p-6">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-4xl">📊</span>
+            <div>
+              <h3 className="font-bold text-lg">O'rtacha</h3>
+              <p className="text-xs text-gray-600">Har bir kishi</p>
+            </div>
+          </div>
+          <div className="text-4xl font-bold text-orange-600">
+            {activeMobilographers > 0 ? Math.round(todayTotalDuration / activeMobilographers / 60) : 0}s
+          </div>
+          <div className="text-sm text-gray-600 mt-1">
+            Per mobilograf
+          </div>
         </div>
       </div>
 
-      {/* Kim Nima Qilyapti */}
-      <div className="card-modern">
-        <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-          👀 Faoliyat ({getFilterLabel()})
-        </h2>
-        
-        {recentActivity.length > 0 ? (
-          <div className="space-y-3">
-            {recentActivity.map((activity) => (
-              <div key={activity.id} className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border border-blue-200 hover:shadow-md transition">
-                <div className="flex items-center gap-4">
-                  <span className="text-4xl">
-                    {activity.type === 'editing' 
-                      ? activity.content_type === 'post' ? '📄' : '📱'
-                      : '📹'}
-                  </span>
+      {/* Today's Workload */}
+      <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-100 overflow-hidden">
+        <div className="bg-gradient-to-r from-blue-500 to-purple-600 p-6 text-white">
+          <h2 className="text-2xl font-bold">📊 Bugungi Ish Yuki</h2>
+          <p className="text-sm opacity-90 mt-1">Real-time workload monitoring</p>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {todayWorkload.map((workload, idx) => (
+            <div key={idx} className={`border-2 rounded-xl p-4 ${
+              workload.statusColor === 'gray' ? 'border-gray-200 bg-gray-50' :
+              workload.statusColor === 'green' ? 'border-green-200 bg-green-50' :
+              workload.statusColor === 'blue' ? 'border-blue-200 bg-blue-50' :
+              workload.statusColor === 'orange' ? 'border-orange-200 bg-orange-50' :
+              'border-red-200 bg-red-50'
+            }`}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="text-3xl">👤</div>
                   <div>
-                    <p className="font-bold text-lg">{activity.mobilographers?.name}</p>
-                    <p className="text-sm text-gray-600">{activity.projects?.name}</p>
-                    <p className="text-xs text-gray-400">
-                      {new Date(activity.created_at).toLocaleDateString('uz-UZ', { 
-                        day: 'numeric',
-                        month: 'short',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
+                    <h3 className="font-bold text-lg">{workload.mobilographer.name}</h3>
+                    <p className={`text-sm font-semibold ${
+                      workload.statusColor === 'gray' ? 'text-gray-600' :
+                      workload.statusColor === 'green' ? 'text-green-600' :
+                      workload.statusColor === 'blue' ? 'text-blue-600' :
+                      workload.statusColor === 'orange' ? 'text-orange-600' :
+                      'text-red-600'
+                    }`}>
+                      {workload.statusLabel}
                     </p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className={`px-4 py-2 rounded-lg font-bold text-sm ${
-                    activity.type === 'editing' 
-                      ? activity.content_type === 'post'
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-pink-100 text-pink-700'
-                      : 'bg-blue-100 text-blue-700'
-                  }`}>
-                    {activity.type === 'editing' 
-                      ? activity.content_type === 'post' ? '📄 POST' : '📱 STORIS'
-                      : '📹 SYOMKA'}
-                  </span>
-                  {activity.count && activity.count > 1 && (
-                    <p className="text-2xl font-bold text-gray-700 mt-2">{activity.count}x</p>
-                  )}
+                  <div className="text-2xl font-bold text-gray-700">
+                    {formatDuration(workload.totalDuration)}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {workload.records.length} ta yozuv
+                  </div>
                 </div>
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-8 bg-gray-50 rounded-xl">
-            <div className="text-5xl mb-3">😴</div>
-            <p className="text-gray-500">{getFilterLabel()} uchun faoliyat yo'q</p>
-          </div>
-        )}
-      </div>
 
-      {/* Loyihalar Holati */}
-      <div className="card-modern">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold flex items-center gap-2">
-            📊 Loyihalar ({getFilterLabel()})
-          </h2>
-          <Link href="/loyihalar">
-            <button className="text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-2 transition">
-              Barchasini ko'rish →
-            </button>
-          </Link>
-        </div>
-        
-        {projectsStatus.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {projectsStatus.slice(0, 6).map((project) => {
-              const deadlineInfo = getDeadlineInfo(project.nearestDeadline)
-              
-              return (
-                <div
-                  key={project.id}
-                  className={`card-modern border-2 ${deadlineInfo?.borderColor || 'border-gray-200'} ${deadlineInfo?.bgColor || ''} hover:shadow-lg transition`}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-bold">{project.name}</h3>
-                      <p className="text-sm text-gray-600">👤 {project.mobilographers?.name}</p>
-                    </div>
-                    <span className={`text-2xl font-bold ${
-                      project.progress >= 100 ? 'text-green-600' :
-                      project.progress >= 75 ? 'text-yellow-600' :
-                      'text-blue-600'
-                    }`}>
-                      {project.progress}%
-                    </span>
-                  </div>
-
-                  <div className="w-full bg-gray-200 rounded-full h-3 mb-3">
-                    <div
-                      className={`progress-bar h-3 rounded-full ${
-                        project.progress >= 100 ? 'bg-green-500' :
-                        project.progress >= 75 ? 'bg-yellow-500' :
-                        'bg-blue-500'
-                      }`}
-                      style={{ width: `${Math.min(project.progress, 100)}%` }}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">
-                      📄 {project.completed}/{project.target} post
-                    </span>
-                    {deadlineInfo && (
-                      <span className={`font-bold ${deadlineInfo.color}`}>
-                        ⏰ {deadlineInfo.text}
+              {workload.totalDuration > 0 && (
+                <>
+                  <div className="flex items-center gap-2 mb-3">
+                    {workload.totalPost > 0 && (
+                      <span className="bg-green-100 text-green-700 px-3 py-1 rounded-lg text-sm font-semibold">
+                        📄 {workload.totalPost} Post
+                      </span>
+                    )}
+                    {workload.totalStoris > 0 && (
+                      <span className="bg-pink-100 text-pink-700 px-3 py-1 rounded-lg text-sm font-semibold">
+                        📱 {workload.totalStoris} Storis
+                      </span>
+                    )}
+                    {workload.totalSyomka > 0 && (
+                      <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg text-sm font-semibold">
+                        📹 {workload.totalSyomka} Syomka
                       </span>
                     )}
                   </div>
 
-                  {project.progress >= 100 && (
-                    <div className="mt-3 bg-green-100 text-green-700 px-3 py-2 rounded-lg text-center font-bold text-sm">
-                      ✅ Bajarildi!
-                    </div>
-                  )}
+                  <div className={`text-sm font-semibold px-3 py-2 rounded-lg ${
+                    workload.statusColor === 'green' ? 'bg-green-100 text-green-700' :
+                    workload.statusColor === 'blue' ? 'bg-blue-100 text-blue-700' :
+                    workload.statusColor === 'orange' ? 'bg-orange-100 text-orange-700' :
+                    'bg-red-100 text-red-700'
+                  }`}>
+                    💡 {workload.recommendation}
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Weekly Trend */}
+      <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-100 overflow-hidden">
+        <div className="bg-gradient-to-r from-purple-500 to-pink-600 p-6 text-white">
+          <h2 className="text-2xl font-bold">📈 Haftalik Trend</h2>
+          <p className="text-sm opacity-90 mt-1">Oxirgi 7 kun</p>
+        </div>
+
+        <div className="p-6">
+          <div className="grid grid-cols-7 gap-4">
+            {weeklyStats.map((stat, idx) => {
+              const maxDuration = Math.max(...weeklyStats.map(s => s.totalDuration))
+              const heightPercent = maxDuration > 0 ? (stat.totalDuration / maxDuration) * 100 : 0
+
+              return (
+                <div key={idx} className="text-center">
+                  <div className={`rounded-xl p-3 mb-2 ${
+                    stat.isToday ? 'bg-gradient-to-br from-blue-500 to-purple-600 text-white' : 'bg-gray-100'
+                  }`}>
+                    <div className="text-xs uppercase mb-1">{stat.weekday}</div>
+                    <div className="text-2xl font-bold">{stat.day}</div>
+                  </div>
+
+                  <div className="h-32 flex items-end justify-center mb-2">
+                    <div 
+                      className={`w-full rounded-t-lg ${
+                        stat.isToday ? 'bg-gradient-to-t from-blue-500 to-purple-600' : 'bg-gradient-to-t from-gray-300 to-gray-400'
+                      }`}
+                      style={{ height: `${heightPercent}%`, minHeight: stat.totalDuration > 0 ? '10%' : '0%' }}
+                    ></div>
+                  </div>
+
+                  <div className="text-sm font-bold text-gray-700">
+                    {Math.round(stat.totalDuration / 60)}s
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {stat.totalWorks} ish
+                  </div>
                 </div>
               )
             })}
           </div>
-        ) : (
-          <div className="text-center py-8 bg-gray-50 rounded-xl">
-            <div className="text-5xl mb-3">📁</div>
-            <p className="text-gray-500 mb-4">Loyihalar yo'q</p>
-            <Link href="/loyihalar/yangi">
-              <button className="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white px-6 py-3 rounded-xl font-semibold transition">
-                ➕ Loyiha Yaratish
-              </button>
-            </Link>
-          </div>
-        )}
+        </div>
       </div>
 
-      {/* Tezkor Havolalar */}
+      {/* Projects Progress */}
+      <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-100 overflow-hidden">
+        <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-6 text-white">
+          <h2 className="text-2xl font-bold">🎯 Loyihalar Progress</h2>
+          <p className="text-sm opacity-90 mt-1">Shu oyning natijalari</p>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {projects.map((project) => (
+            <div key={project.id} className="border-2 border-gray-200 rounded-xl p-4 hover:border-green-400 transition-all">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="font-bold text-lg">{project.name}</h3>
+                  <p className="text-sm text-gray-500">{project.mobilographers?.name}</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-green-600">
+                    {project.completed}/{project.monthly_target}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {project.progress}%
+                  </div>
+                </div>
+              </div>
+
+              <div className="relative">
+                <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      project.progress >= 100 ? 'bg-gradient-to-r from-green-500 to-emerald-600' :
+                      project.progress >= 70 ? 'bg-gradient-to-r from-blue-500 to-blue-600' :
+                      project.progress >= 40 ? 'bg-gradient-to-r from-yellow-500 to-orange-500' :
+                      'bg-gradient-to-r from-red-500 to-pink-600'
+                    }`}
+                    style={{ width: `${Math.min(project.progress, 100)}%` }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Link href="/kiritish">
-          <div className="card-modern hover:shadow-xl transition-all transform hover:scale-105 cursor-pointer bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center text-3xl">
-                ➕
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-gray-800">Ish Kiritish</h3>
-                <p className="text-sm text-gray-600">Yangi ish qo'shish</p>
-              </div>
-            </div>
+        <Link href="/kiritish" className="block">
+          <div className="bg-gradient-to-br from-green-500 to-emerald-600 text-white rounded-2xl p-6 hover:scale-105 transition-transform cursor-pointer shadow-lg">
+            <div className="text-5xl mb-3">➕</div>
+            <h3 className="text-xl font-bold mb-2">Yangi Ish</h3>
+            <p className="text-sm opacity-90">Ish kiritish</p>
           </div>
         </Link>
 
-        <Link href="/timeline">
-          <div className="card-modern hover:shadow-xl transition-all transform hover:scale-105 cursor-pointer bg-gradient-to-br from-blue-50 to-purple-50 border-2 border-blue-200">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center text-3xl">
-                📅
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-gray-800">Timeline</h3>
-                <p className="text-sm text-gray-600">Haftalik reja</p>
-              </div>
-            </div>
+        <Link href="/timeline" className="block">
+          <div className="bg-gradient-to-br from-blue-500 to-purple-600 text-white rounded-2xl p-6 hover:scale-105 transition-transform cursor-pointer shadow-lg">
+            <div className="text-5xl mb-3">📅</div>
+            <h3 className="text-xl font-bold mb-2">Timeline</h3>
+            <p className="text-sm opacity-90">Haftalik jadval</p>
           </div>
         </Link>
 
-        <Link href="/oylik">
-          <div className="card-modern hover:shadow-xl transition-all transform hover:scale-105 cursor-pointer bg-gradient-to-br from-orange-50 to-red-50 border-2 border-orange-200">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl flex items-center justify-center text-3xl">
-                📊
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-gray-800">Oylik Hisobot</h3>
-                <p className="text-sm text-gray-600">Reyting va statistika</p>
-              </div>
-            </div>
+        <Link href="/reyting" className="block">
+          <div className="bg-gradient-to-br from-orange-500 to-yellow-600 text-white rounded-2xl p-6 hover:scale-105 transition-transform cursor-pointer shadow-lg">
+            <div className="text-5xl mb-3">🏆</div>
+            <h3 className="text-xl font-bold mb-2">Reyting</h3>
+            <p className="text-sm opacity-90">Ball tizimi</p>
           </div>
         </Link>
       </div>
