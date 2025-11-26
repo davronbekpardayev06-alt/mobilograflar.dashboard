@@ -35,6 +35,8 @@ export default function KiritishPage() {
     count: 1,
     date: new Date().toISOString().split('T')[0],
     time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
+    start_time: '',
+    end_time: '',
     notes: ''
   })
 
@@ -183,6 +185,30 @@ export default function KiritishPage() {
     setGroupedRecords(Array.from(grouped.values()))
   }
 
+  const calculateDuration = (start: string, end: string): string => {
+    if (!start || !end) return ''
+    
+    const [startHour, startMin] = start.split(':').map(Number)
+    const [endHour, endMin] = end.split(':').map(Number)
+    
+    let totalMinutes = (endHour * 60 + endMin) - (startHour * 60 + startMin)
+    
+    if (totalMinutes < 0) {
+      totalMinutes += 24 * 60 // Handle crossing midnight
+    }
+    
+    const hours = Math.floor(totalMinutes / 60)
+    const minutes = totalMinutes % 60
+    
+    if (hours > 0 && minutes > 0) {
+      return `${hours} soat ${minutes} daqiqa`
+    } else if (hours > 0) {
+      return `${hours} soat`
+    } else {
+      return `${minutes} daqiqa`
+    }
+  }
+
   const getMonthName = (monthNum: number) => {
     const months = [
       'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun',
@@ -267,9 +293,26 @@ export default function KiritishPage() {
       return
     }
 
+    // Montaj uchun vaqt kiritilganligini tekshirish
+    if (newRecord.type === 'editing' && (!newRecord.start_time || !newRecord.end_time)) {
+      alert('Montaj uchun boshlangan va tugagan vaqtni kiriting!')
+      return
+    }
+
     setSubmitting(true)
 
     try {
+      // Calculate duration in minutes if times are provided
+      let durationMinutes = null
+      if (newRecord.start_time && newRecord.end_time) {
+        const [startHour, startMin] = newRecord.start_time.split(':').map(Number)
+        const [endHour, endMin] = newRecord.end_time.split(':').map(Number)
+        durationMinutes = (endHour * 60 + endMin) - (startHour * 60 + startMin)
+        if (durationMinutes < 0) {
+          durationMinutes += 24 * 60
+        }
+      }
+
       const { data: createdRecord, error: recordError } = await supabase
         .from('records')
         .insert([{
@@ -279,6 +322,9 @@ export default function KiritishPage() {
           content_type: newRecord.content_type,
           date: newRecord.date,
           time: newRecord.time || null,
+          start_time: newRecord.start_time || null,
+          end_time: newRecord.end_time || null,
+          duration_minutes: durationMinutes,
           notes: newRecord.notes || null,
           count: newRecord.count
         }])
@@ -339,7 +385,8 @@ export default function KiritishPage() {
         await supabase.from('videos').insert(videosToInsert)
       }
 
-      alert(`✅ ${newRecord.count} ta ${newRecord.type === 'editing' ? newRecord.content_type === 'post' ? 'post' : 'storis' : 'syomka'} muvaffaqiyatli qo'shildi!`)
+      const durationText = durationMinutes ? ` (${calculateDuration(newRecord.start_time, newRecord.end_time)})` : ''
+      alert(`✅ ${newRecord.count} ta ${newRecord.type === 'editing' ? newRecord.content_type === 'post' ? 'post' : 'storis' : 'syomka'} muvaffaqiyatli qo'shildi!${durationText}`)
       
       setNewRecord({
         mobilographer_id: '',
@@ -349,6 +396,8 @@ export default function KiritishPage() {
         count: 1,
         date: new Date().toISOString().split('T')[0],
         time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
+        start_time: '',
+        end_time: '',
         notes: ''
       })
       
@@ -511,39 +560,80 @@ export default function KiritishPage() {
             </div>
 
             {newRecord.type === 'editing' && (
-              <div>
-                <label className="block text-sm font-semibold mb-3 text-gray-700">
-                  📱 Kontent turi
-                </label>
-                <div className="grid grid-cols-2 gap-4">
-                  <button
-                    type="button"
-                    onClick={() => setNewRecord({ ...newRecord, content_type: 'post' })}
-                    className={`py-6 rounded-2xl font-bold text-lg transition-all duration-200 transform hover:scale-105 ${
-                      newRecord.content_type === 'post'
-                        ? 'bg-gradient-to-br from-green-500 to-green-600 text-white shadow-2xl scale-105'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    <div className="text-4xl mb-2">📄</div>
-                    Post
-                    <div className="text-xs mt-1 opacity-90">Loyiha maqsadiga hisoblanadi</div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setNewRecord({ ...newRecord, content_type: 'storis' })}
-                    className={`py-6 rounded-2xl font-bold text-lg transition-all duration-200 transform hover:scale-105 ${
-                      newRecord.content_type === 'storis'
-                        ? 'bg-gradient-to-br from-pink-500 to-pink-600 text-white shadow-2xl scale-105'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    <div className="text-4xl mb-2">📱</div>
-                    Storis
-                    <div className="text-xs mt-1 opacity-90">Faqat statistikada</div>
-                  </button>
+              <>
+                <div>
+                  <label className="block text-sm font-semibold mb-3 text-gray-700">
+                    📱 Kontent turi
+                  </label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setNewRecord({ ...newRecord, content_type: 'post' })}
+                      className={`py-6 rounded-2xl font-bold text-lg transition-all duration-200 transform hover:scale-105 ${
+                        newRecord.content_type === 'post'
+                          ? 'bg-gradient-to-br from-green-500 to-green-600 text-white shadow-2xl scale-105'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      <div className="text-4xl mb-2">📄</div>
+                      Post
+                      <div className="text-xs mt-1 opacity-90">Loyiha maqsadiga hisoblanadi</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewRecord({ ...newRecord, content_type: 'storis' })}
+                      className={`py-6 rounded-2xl font-bold text-lg transition-all duration-200 transform hover:scale-105 ${
+                        newRecord.content_type === 'storis'
+                          ? 'bg-gradient-to-br from-pink-500 to-pink-600 text-white shadow-2xl scale-105'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      <div className="text-4xl mb-2">📱</div>
+                      Storis
+                      <div className="text-xs mt-1 opacity-90">Faqat statistikada</div>
+                    </button>
+                  </div>
                 </div>
-              </div>
+
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-2xl p-6">
+                  <label className="block text-lg font-bold mb-4 text-gray-800 flex items-center gap-2">
+                    ⏱️ Montaj vaqti
+                  </label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold mb-2 text-gray-700">
+                        🟢 Boshlangan vaqt
+                      </label>
+                      <input
+                        type="time"
+                        value={newRecord.start_time}
+                        onChange={(e) => setNewRecord({ ...newRecord, start_time: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl border-2 border-blue-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none text-lg font-semibold"
+                        required={newRecord.type === 'editing'}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold mb-2 text-gray-700">
+                        🔴 Tugagan vaqt
+                      </label>
+                      <input
+                        type="time"
+                        value={newRecord.end_time}
+                        onChange={(e) => setNewRecord({ ...newRecord, end_time: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl border-2 border-blue-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none text-lg font-semibold"
+                        required={newRecord.type === 'editing'}
+                      />
+                    </div>
+                  </div>
+                  {newRecord.start_time && newRecord.end_time && (
+                    <div className="mt-4 bg-white rounded-xl p-4 border-2 border-blue-200">
+                      <p className="text-center text-lg font-bold text-gray-800">
+                        ⏳ Jami: <span className="text-blue-600">{calculateDuration(newRecord.start_time, newRecord.end_time)}</span>
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </>
             )}
 
             <div className="bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-yellow-300 rounded-2xl p-6">
@@ -759,6 +849,11 @@ export default function KiritishPage() {
                               day: 'numeric'
                             })} • {record.time || '---'}
                           </p>
+                          {record.start_time && record.end_time && (
+                            <p className="text-xs text-blue-600 font-semibold mt-1">
+                              ⏱️ {record.start_time} - {record.end_time} ({calculateDuration(record.start_time, record.end_time)})
+                            </p>
+                          )}
                           {record.notes && (
                             <p className="text-xs text-gray-600 mt-1">{record.notes}</p>
                           )}
