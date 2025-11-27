@@ -9,6 +9,7 @@ export default function DashboardPage() {
   const [mobilographers, setMobilographers] = useState<any[]>([])
   const [todayWorkload, setTodayWorkload] = useState<any[]>([])
   const [weeklyStats, setWeeklyStats] = useState<any[]>([])
+  const [monthlyTarget, setMonthlyTarget] = useState<any>({ total: 0, completed: 0 })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -67,6 +68,11 @@ export default function DashboardPage() {
         }
       })
     )
+
+    // Calculate monthly totals
+    const totalTarget = projectsWithProgress.reduce((sum, p) => sum + (p.monthly_target || 0), 0)
+    const totalCompleted = projectsWithProgress.reduce((sum, p) => sum + p.completed, 0)
+    setMonthlyTarget({ total: totalTarget, completed: totalCompleted })
 
     setProjects(projectsWithProgress)
   }
@@ -228,6 +234,7 @@ export default function DashboardPage() {
   const todayTotalDuration = todayWorkload.reduce((sum, w) => sum + w.totalDuration, 0)
   const todayTotalWorks = todayWorkload.reduce((sum, w) => sum + w.totalPost + w.totalStoris + w.totalSyomka, 0)
   const activeMobilographers = todayWorkload.filter(w => w.totalDuration > 0).length
+  const monthlyProgress = monthlyTarget.total > 0 ? Math.round((monthlyTarget.completed / monthlyTarget.total) * 100) : 0
 
   return (
     <div className="space-y-6 animate-slide-in">
@@ -246,7 +253,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Today's Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-3">
             <span className="text-4xl">⏰</span>
@@ -295,19 +302,35 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        <div className="bg-gradient-to-br from-pink-50 to-rose-50 border-2 border-pink-200 rounded-2xl p-6">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-4xl">📁</span>
+            <div>
+              <h3 className="font-bold text-lg">Loyihalar</h3>
+              <p className="text-xs text-gray-600">Jami</p>
+            </div>
+          </div>
+          <div className="text-4xl font-bold text-pink-600">
+            {projects.length}
+          </div>
+          <div className="text-sm text-gray-600 mt-1">
+            Faol loyihalar
+          </div>
+        </div>
+
         <div className="bg-gradient-to-br from-orange-50 to-yellow-50 border-2 border-orange-200 rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-3">
-            <span className="text-4xl">📊</span>
+            <span className="text-4xl">🎯</span>
             <div>
-              <h3 className="font-bold text-lg">O'rtacha</h3>
-              <p className="text-xs text-gray-600">Har bir kishi</p>
+              <h3 className="font-bold text-lg">Oylik Maqsad</h3>
+              <p className="text-xs text-gray-600">Progress</p>
             </div>
           </div>
           <div className="text-4xl font-bold text-orange-600">
-            {activeMobilographers > 0 ? Math.round(todayTotalDuration / activeMobilographers / 60) : 0}s
+            {monthlyProgress}%
           </div>
           <div className="text-sm text-gray-600 mt-1">
-            Per mobilograf
+            {monthlyTarget.completed}/{monthlyTarget.total}
           </div>
         </div>
       </div>
@@ -320,72 +343,79 @@ export default function DashboardPage() {
         </div>
 
         <div className="p-6 space-y-4">
-          {todayWorkload.map((workload, idx) => (
-            <div key={idx} className={`border-2 rounded-xl p-4 ${
-              workload.statusColor === 'gray' ? 'border-gray-200 bg-gray-50' :
-              workload.statusColor === 'green' ? 'border-green-200 bg-green-50' :
-              workload.statusColor === 'blue' ? 'border-blue-200 bg-blue-50' :
-              workload.statusColor === 'orange' ? 'border-orange-200 bg-orange-50' :
-              'border-red-200 bg-red-50'
-            }`}>
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div className="text-3xl">👤</div>
-                  <div>
-                    <h3 className="font-bold text-lg">{workload.mobilographer.name}</h3>
-                    <p className={`text-sm font-semibold ${
-                      workload.statusColor === 'gray' ? 'text-gray-600' :
-                      workload.statusColor === 'green' ? 'text-green-600' :
-                      workload.statusColor === 'blue' ? 'text-blue-600' :
-                      workload.statusColor === 'orange' ? 'text-orange-600' :
-                      'text-red-600'
+          {todayWorkload.length > 0 ? (
+            todayWorkload.map((workload, idx) => (
+              <div key={idx} className={`border-2 rounded-xl p-4 ${
+                workload.statusColor === 'gray' ? 'border-gray-200 bg-gray-50' :
+                workload.statusColor === 'green' ? 'border-green-200 bg-green-50' :
+                workload.statusColor === 'blue' ? 'border-blue-200 bg-blue-50' :
+                workload.statusColor === 'orange' ? 'border-orange-200 bg-orange-50' :
+                'border-red-200 bg-red-50'
+              }`}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="text-3xl">👤</div>
+                    <div>
+                      <h3 className="font-bold text-lg">{workload.mobilographer.name}</h3>
+                      <p className={`text-sm font-semibold ${
+                        workload.statusColor === 'gray' ? 'text-gray-600' :
+                        workload.statusColor === 'green' ? 'text-green-600' :
+                        workload.statusColor === 'blue' ? 'text-blue-600' :
+                        workload.statusColor === 'orange' ? 'text-orange-600' :
+                        'text-red-600'
+                      }`}>
+                        {workload.statusLabel}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-bold text-gray-700">
+                      {formatDuration(workload.totalDuration)}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {workload.records.length} ta yozuv
+                    </div>
+                  </div>
+                </div>
+
+                {workload.totalDuration > 0 && (
+                  <>
+                    <div className="flex items-center gap-2 mb-3">
+                      {workload.totalPost > 0 && (
+                        <span className="bg-green-100 text-green-700 px-3 py-1 rounded-lg text-sm font-semibold">
+                          📄 {workload.totalPost} Post
+                        </span>
+                      )}
+                      {workload.totalStoris > 0 && (
+                        <span className="bg-pink-100 text-pink-700 px-3 py-1 rounded-lg text-sm font-semibold">
+                          📱 {workload.totalStoris} Storis
+                        </span>
+                      )}
+                      {workload.totalSyomka > 0 && (
+                        <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg text-sm font-semibold">
+                          📹 {workload.totalSyomka} Syomka
+                        </span>
+                      )}
+                    </div>
+
+                    <div className={`text-sm font-semibold px-3 py-2 rounded-lg ${
+                      workload.statusColor === 'green' ? 'bg-green-100 text-green-700' :
+                      workload.statusColor === 'blue' ? 'bg-blue-100 text-blue-700' :
+                      workload.statusColor === 'orange' ? 'bg-orange-100 text-orange-700' :
+                      'bg-red-100 text-red-700'
                     }`}>
-                      {workload.statusLabel}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-2xl font-bold text-gray-700">
-                    {formatDuration(workload.totalDuration)}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    {workload.records.length} ta yozuv
-                  </div>
-                </div>
+                      💡 {workload.recommendation}
+                    </div>
+                  </>
+                )}
               </div>
-
-              {workload.totalDuration > 0 && (
-                <>
-                  <div className="flex items-center gap-2 mb-3">
-                    {workload.totalPost > 0 && (
-                      <span className="bg-green-100 text-green-700 px-3 py-1 rounded-lg text-sm font-semibold">
-                        📄 {workload.totalPost} Post
-                      </span>
-                    )}
-                    {workload.totalStoris > 0 && (
-                      <span className="bg-pink-100 text-pink-700 px-3 py-1 rounded-lg text-sm font-semibold">
-                        📱 {workload.totalStoris} Storis
-                      </span>
-                    )}
-                    {workload.totalSyomka > 0 && (
-                      <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg text-sm font-semibold">
-                        📹 {workload.totalSyomka} Syomka
-                      </span>
-                    )}
-                  </div>
-
-                  <div className={`text-sm font-semibold px-3 py-2 rounded-lg ${
-                    workload.statusColor === 'green' ? 'bg-green-100 text-green-700' :
-                    workload.statusColor === 'blue' ? 'bg-blue-100 text-blue-700' :
-                    workload.statusColor === 'orange' ? 'bg-orange-100 text-orange-700' :
-                    'bg-red-100 text-red-700'
-                  }`}>
-                    💡 {workload.recommendation}
-                  </div>
-                </>
-              )}
+            ))
+          ) : (
+            <div className="text-center py-12 text-gray-400">
+              <div className="text-6xl mb-4">📊</div>
+              <p className="text-lg">Bugun hali hech kim ish kiritmagandi</p>
             </div>
-          ))}
+          )}
         </div>
       </div>
 
@@ -399,8 +429,8 @@ export default function DashboardPage() {
         <div className="p-6">
           <div className="grid grid-cols-7 gap-4">
             {weeklyStats.map((stat, idx) => {
-              const maxDuration = Math.max(...weeklyStats.map(s => s.totalDuration))
-              const heightPercent = maxDuration > 0 ? (stat.totalDuration / maxDuration) * 100 : 0
+              const maxDuration = Math.max(...weeklyStats.map(s => s.totalDuration), 1)
+              const heightPercent = (stat.totalDuration / maxDuration) * 100
 
               return (
                 <div key={idx} className="text-center">
@@ -413,7 +443,7 @@ export default function DashboardPage() {
 
                   <div className="h-32 flex items-end justify-center mb-2">
                     <div 
-                      className={`w-full rounded-t-lg ${
+                      className={`w-full rounded-t-lg transition-all ${
                         stat.isToday ? 'bg-gradient-to-t from-blue-500 to-purple-600' : 'bg-gradient-to-t from-gray-300 to-gray-400'
                       }`}
                       style={{ height: `${heightPercent}%`, minHeight: stat.totalDuration > 0 ? '10%' : '0%' }}
