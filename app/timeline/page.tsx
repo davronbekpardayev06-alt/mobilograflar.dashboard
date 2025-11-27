@@ -254,25 +254,70 @@ export default function TimelinePage() {
   }
 
   const formatDuration = (minutes: number): string => {
-    if (!minutes) return '0d'
+    if (!minutes) return '0 daqiqa'
     const hours = Math.floor(minutes / 60)
     const mins = minutes % 60
     if (hours > 0 && mins > 0) {
-      return `${hours}s ${mins}d`
+      return `${hours} soat ${mins} daqiqa`
     } else if (hours > 0) {
-      return `${hours}s`
+      return `${hours} soat`
     } else {
-      return `${mins}d`
+      return `${mins} daqiqa`
     }
   }
 
   const getWorkloadStatus = (totalDuration: number) => {
     const hours = totalDuration / 60
-    if (hours === 0) return { status: 'none', label: 'Ish yo\'q', color: 'gray', emoji: '⚪' }
-    if (hours < 3) return { status: 'light', label: 'Engil', color: 'green', emoji: '🟢' }
-    if (hours <= 7) return { status: 'optimal', label: 'Optimal', color: 'blue', emoji: '🔵' }
-    if (hours <= 10) return { status: 'heavy', label: 'Og\'ir', color: 'orange', emoji: '🟠' }
-    return { status: 'overloaded', label: 'Haddan tashqari', color: 'red', emoji: '🔴' }
+    
+    if (hours < 8) {
+      const deficit = 480 - totalDuration // 8 soat = 480 daqiqa
+      const deficitHours = Math.floor(deficit / 60)
+      const deficitMins = deficit % 60
+      let deficitText = ''
+      if (deficitHours > 0 && deficitMins > 0) {
+        deficitText = `${deficitHours} soat ${deficitMins} daqiqa`
+      } else if (deficitHours > 0) {
+        deficitText = `${deficitHours} soat`
+      } else {
+        deficitText = `${deficitMins} daqiqa`
+      }
+      
+      return { 
+        status: 'low', 
+        label: 'Kam ishladi', 
+        color: 'red', 
+        emoji: '🔴',
+        message: `8 soatdan ${deficitText} kam`
+      }
+    } else if (hours >= 8 && hours < 9) {
+      return { 
+        status: 'normal', 
+        label: 'Normal', 
+        color: 'yellow', 
+        emoji: '🟡',
+        message: 'Standart ish kuni'
+      }
+    } else {
+      const overtime = totalDuration - 480
+      const overtimeHours = Math.floor(overtime / 60)
+      const overtimeMins = overtime % 60
+      let overtimeText = ''
+      if (overtimeHours > 0 && overtimeMins > 0) {
+        overtimeText = `${overtimeHours} soat ${overtimeMins} daqiqa`
+      } else if (overtimeHours > 0) {
+        overtimeText = `${overtimeHours} soat`
+      } else {
+        overtimeText = `${overtimeMins} daqiqa`
+      }
+      
+      return { 
+        status: 'high', 
+        label: 'Ko\'p ishladi', 
+        color: 'green', 
+        emoji: '🟢',
+        message: `8 soatdan ${overtimeText} ko'p (Overtime)`
+      }
+    }
   }
 
   const getSessionForDay = (mobilographerId: string, date: string) => {
@@ -721,7 +766,7 @@ export default function TimelinePage() {
                         </div>
                         <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-4 text-center">
                           <div className="text-4xl font-bold text-purple-600">
-                            {Math.round(weekTotal.duration / 60)}s
+                            {formatDuration(weekTotal.duration)}
                           </div>
                           <div className="text-sm text-purple-700 mt-1">⏰ Jami</div>
                         </div>
