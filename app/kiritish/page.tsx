@@ -18,8 +18,6 @@ export default function KiritishPage() {
   const [groupedRecords, setGroupedRecords] = useState<GroupedRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
-  const [isTimerRunning, setIsTimerRunning] = useState(false)
-  const [timerSeconds, setTimerSeconds] = useState(0)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   
   const [filterType, setFilterType] = useState<'today' | 'yesterday' | 'month'>('today')
@@ -48,16 +46,6 @@ export default function KiritishPage() {
   useEffect(() => {
     fetchRecordsByFilter()
   }, [filterType, selectedYear, selectedMonth])
-
-  useEffect(() => {
-    let interval: any
-    if (isTimerRunning) {
-      interval = setInterval(() => {
-        setTimerSeconds(prev => prev + 1)
-      }, 1000)
-    }
-    return () => clearInterval(interval)
-  }, [isTimerRunning])
 
   const loadAvailableYears = async () => {
     try {
@@ -185,8 +173,8 @@ export default function KiritishPage() {
     setGroupedRecords(Array.from(grouped.values()))
   }
 
-  const calculateDuration = (start: string, end: string): string => {
-    if (!start || !end) return ''
+  const calculateDuration = (start: string, end: string): { minutes: number, text: string } => {
+    if (!start || !end) return { minutes: 0, text: '' }
     
     const [startHour, startMin] = start.split(':').map(Number)
     const [endHour, endMin] = end.split(':').map(Number)
@@ -194,18 +182,34 @@ export default function KiritishPage() {
     let totalMinutes = (endHour * 60 + endMin) - (startHour * 60 + startMin)
     
     if (totalMinutes < 0) {
-      totalMinutes += 24 * 60 // Handle crossing midnight
+      totalMinutes += 24 * 60
     }
     
     const hours = Math.floor(totalMinutes / 60)
     const minutes = totalMinutes % 60
     
+    let text = ''
     if (hours > 0 && minutes > 0) {
-      return `${hours} soat ${minutes} daqiqa`
+      text = `${hours} soat ${minutes} daqiqa`
+    } else if (hours > 0) {
+      text = `${hours} soat`
+    } else {
+      text = `${minutes} daqiqa`
+    }
+    
+    return { minutes: totalMinutes, text }
+  }
+
+  const formatDuration = (minutes: number): string => {
+    if (!minutes) return '0 daqiqa'
+    const hours = Math.floor(minutes / 60)
+    const mins = minutes % 60
+    if (hours > 0 && mins > 0) {
+      return `${hours} soat ${mins} daqiqa`
     } else if (hours > 0) {
       return `${hours} soat`
     } else {
-      return `${minutes} daqiqa`
+      return `${mins} daqiqa`
     }
   }
 
@@ -221,22 +225,6 @@ export default function KiritishPage() {
     if (filterType === 'today') return 'Bugun'
     if (filterType === 'yesterday') return 'Kecha'
     return `${getMonthName(selectedMonth)} ${selectedYear}`
-  }
-
-  const formatTime = (seconds: number) => {
-    const hrs = Math.floor(seconds / 3600)
-    const mins = Math.floor((seconds % 3600) / 60)
-    const secs = seconds % 60
-    return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-  }
-
-  const toggleTimer = () => {
-    setIsTimerRunning(!isTimerRunning)
-  }
-
-  const resetTimer = () => {
-    setIsTimerRunning(false)
-    setTimerSeconds(0)
   }
 
   const handleDelete = async (id: string) => {
@@ -293,7 +281,7 @@ export default function KiritishPage() {
       return
     }
 
-    // Montaj uchun vaqt kiritilganligini tekshirish
+    // Montaj uchun vaqt tekshirish
     if (newRecord.type === 'editing' && (!newRecord.start_time || !newRecord.end_time)) {
       alert('Montaj uchun boshlangan va tugagan vaqtni kiriting!')
       return
@@ -302,15 +290,11 @@ export default function KiritishPage() {
     setSubmitting(true)
 
     try {
-      // Calculate duration in minutes if times are provided
+      // Vaqt farqini hisoblash
       let durationMinutes = null
       if (newRecord.start_time && newRecord.end_time) {
-        const [startHour, startMin] = newRecord.start_time.split(':').map(Number)
-        const [endHour, endMin] = newRecord.end_time.split(':').map(Number)
-        durationMinutes = (endHour * 60 + endMin) - (startHour * 60 + startMin)
-        if (durationMinutes < 0) {
-          durationMinutes += 24 * 60
-        }
+        const duration = calculateDuration(newRecord.start_time, newRecord.end_time)
+        durationMinutes = duration.minutes
       }
 
       const { data: createdRecord, error: recordError } = await supabase
@@ -385,7 +369,7 @@ export default function KiritishPage() {
         await supabase.from('videos').insert(videosToInsert)
       }
 
-      const durationText = durationMinutes ? ` (${calculateDuration(newRecord.start_time, newRecord.end_time)})` : ''
+      const durationText = durationMinutes ? ` (${formatDuration(durationMinutes)})` : ''
       alert(`✅ ${newRecord.count} ta ${newRecord.type === 'editing' ? newRecord.content_type === 'post' ? 'post' : 'storis' : 'syomka'} muvaffaqiyatli qo'shildi!${durationText}`)
       
       setNewRecord({
@@ -401,7 +385,6 @@ export default function KiritishPage() {
         notes: ''
       })
       
-      resetTimer()
       fetchRecordsByFilter()
       loadAvailableYears()
       setSubmitting(false)
@@ -437,27 +420,6 @@ export default function KiritishPage() {
                 <h2 className="text-2xl font-bold">Ish Haqida Ma'lumot</h2>
                 <p className="text-sm opacity-90 mt-1">{new Date().toLocaleDateString('uz-UZ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
               </div>
-              {newRecord.type === 'filming' && (
-                <div className="text-center bg-white/20 rounded-xl p-4">
-                  <div className="text-4xl font-mono font-bold">{formatTime(timerSeconds)}</div>
-                  <div className="flex gap-2 mt-2">
-                    <button
-                      type="button"
-                      onClick={toggleTimer}
-                      className="bg-white text-green-600 px-4 py-1 rounded-lg font-semibold text-sm hover:bg-gray-100 transition"
-                    >
-                      {isTimerRunning ? '⏸️ Pauza' : '▶️ Boshlash'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={resetTimer}
-                      className="bg-white/80 text-red-600 px-4 py-1 rounded-lg font-semibold text-sm hover:bg-white transition"
-                    >
-                      🔄 Reset
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 
@@ -597,7 +559,7 @@ export default function KiritishPage() {
 
                 <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-2xl p-6">
                   <label className="block text-lg font-bold mb-4 text-gray-800 flex items-center gap-2">
-                    ⏱️ Montaj vaqti
+                    ⏱️ Montaj vaqti (Majburiy)
                   </label>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -628,7 +590,7 @@ export default function KiritishPage() {
                   {newRecord.start_time && newRecord.end_time && (
                     <div className="mt-4 bg-white rounded-xl p-4 border-2 border-blue-200">
                       <p className="text-center text-lg font-bold text-gray-800">
-                        ⏳ Jami: <span className="text-blue-600">{calculateDuration(newRecord.start_time, newRecord.end_time)}</span>
+                        ⏳ Jami: <span className="text-blue-600">{calculateDuration(newRecord.start_time, newRecord.end_time).text}</span>
                       </p>
                     </div>
                   )}
@@ -703,6 +665,7 @@ export default function KiritishPage() {
         </div>
       </div>
 
+      {/* Kiritilgan Ishlar ro'yxati - eskisi saqlanadi */}
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-bold">📋 Kiritilgan Ishlar</h2>
@@ -851,7 +814,7 @@ export default function KiritishPage() {
                           </p>
                           {record.start_time && record.end_time && (
                             <p className="text-xs text-blue-600 font-semibold mt-1">
-                              ⏱️ {record.start_time} - {record.end_time} ({calculateDuration(record.start_time, record.end_time)})
+                              ⏱️ {record.start_time} - {record.end_time} ({formatDuration(record.duration_minutes)})
                             </p>
                           )}
                           {record.notes && (
