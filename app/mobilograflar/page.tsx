@@ -133,8 +133,7 @@ export default function MobilograflarPage() {
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1)
   const [availableYears, setAvailableYears] = useState<number[]>([])
   const [newMobilographer, setNewMobilographer] = useState({
-    name: '',
-    monthly_target: 24
+    name: ''
   })
 
   useEffect(() => {
@@ -259,12 +258,11 @@ export default function MobilograflarPage() {
       await supabase
         .from('mobilographers')
         .insert([{
-          name: newMobilographer.name,
-          monthly_target: newMobilographer.monthly_target
+          name: newMobilographer.name
         }])
 
       alert('✅ Mobilograf qo\'shildi!')
-      setNewMobilographer({ name: '', monthly_target: 24 })
+      setNewMobilographer({ name: '' })
       setShowNewForm(false)
       fetchData()
     } catch (error) {
@@ -285,8 +283,7 @@ export default function MobilograflarPage() {
       await supabase
         .from('mobilographers')
         .update({
-          name: editingMobilographer.name,
-          monthly_target: editingMobilographer.monthly_target
+          name: editingMobilographer.name
         })
         .eq('id', editingMobilographer.id)
 
@@ -486,19 +483,7 @@ export default function MobilograflarPage() {
                 value={newMobilographer.name}
                 onChange={(e) => setNewMobilographer({ ...newMobilographer, name: e.target.value })}
                 className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 transition-all outline-none"
-                placeholder="Masalan: Og'abek"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Oylik maqsad (jami postlar)</label>
-              <input
-                type="number"
-                min="1"
-                value={newMobilographer.monthly_target}
-                onChange={(e) => setNewMobilographer({ ...newMobilographer, monthly_target: parseInt(e.target.value) })}
-                className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 transition-all outline-none"
+                placeholder="Masalan: Ozod"
                 required
               />
             </div>
@@ -533,18 +518,6 @@ export default function MobilograflarPage() {
                 type="text"
                 value={editingMobilographer.name}
                 onChange={(e) => setEditingMobilographer({ ...editingMobilographer, name: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all outline-none"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Oylik maqsad (jami postlar)</label>
-              <input
-                type="number"
-                min="1"
-                value={editingMobilographer.monthly_target}
-                onChange={(e) => setEditingMobilographer({ ...editingMobilographer, monthly_target: parseInt(e.target.value) })}
                 className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all outline-none"
                 required
               />
