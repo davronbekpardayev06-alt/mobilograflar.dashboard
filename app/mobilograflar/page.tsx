@@ -3,6 +3,133 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 
+function ProjectCard({ project, mobId, onReassign }: any) {
+  const [stats, setStats] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetchProjectStats()
+  }, [])
+
+  const fetchProjectStats = async () => {
+    try {
+      const currentMonth = new Date()
+      const firstDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1)
+      const lastDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59, 999)
+
+      const { data: videos } = await supabase
+        .from('videos')
+        .select('*')
+        .eq('project_id', project.id)
+        .gte('created_at', firstDay.toISOString())
+        .lte('created_at', lastDay.toISOString())
+
+      const syomka = videos?.filter(v => v.filming_status === 'completed').length || 0
+      const montaj = videos?.filter(
+        v => v.record_id !== null && 
+             v.editing_status === 'completed' && 
+             v.content_type === 'post' && 
+             v.task_type === 'montaj'
+      ).length || 0
+      const pending = videos?.filter(
+        v => v.editing_status === 'pending' && 
+             v.content_type === 'post'
+      ).length || 0
+
+      const montajProgress = project.monthly_target > 0 ? Math.round((montaj / project.monthly_target) * 100) : 0
+      const syomkaProgress = project.monthly_target > 0 ? Math.round((syomka / project.monthly_target) * 100) : 0
+
+      setStats({ syomka, montaj, pending, montajProgress, syomkaProgress })
+      setLoading(false)
+    } catch (error) {
+      console.error('Error fetching project stats:', error)
+      setLoading(false)
+    }
+  }
+
+  if (loading || !stats) {
+    return (
+      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+        <div className="animate-pulse">
+          <div className="h-4 bg-gray-300 rounded w-3/4 mb-2"></div>
+          <div className="h-3 bg-gray-300 rounded w-1/2"></div>
+        </div>
+      </div>
+    )
+  }
+
+  const getStatusColor = (progress: number) => {
+    if (progress >= 100) return 'text-green-600'
+    if (progress >= 70) return 'text-blue-600'
+    if (progress >= 40) return 'text-yellow-600'
+    return 'text-red-600'
+  }
+
+  return (
+    <div className="bg-white rounded-lg p-4 border border-gray-300 hover:border-gray-400 transition-colors">
+      {/* Header */}
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex-1">
+          <h4 className="font-semibold text-gray-900 text-base mb-1">{project.name}</h4>
+          <p className="text-xs text-gray-500">Oylik maqsad: {project.monthly_target} post</p>
+        </div>
+        <button
+          onClick={() => onReassign(project.id, project.name, mobId)}
+          className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded font-medium transition-colors"
+          title="Boshqa mobilografga o'tkazish"
+        >
+          O'tkazish
+        </button>
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-3 gap-3 mb-3">
+        {/* Syomka */}
+        <div className="text-center">
+          <div className="text-xs text-gray-500 mb-1">Syomka</div>
+          <div className="text-lg font-bold text-gray-900">{stats.syomka}/{project.monthly_target}</div>
+          <div className="text-xs text-gray-600">{stats.syomkaProgress}%</div>
+        </div>
+
+        {/* Montaj */}
+        <div className="text-center">
+          <div className="text-xs text-gray-500 mb-1">Montaj</div>
+          <div className="text-lg font-bold text-gray-900">{stats.montaj}/{project.monthly_target}</div>
+          <div className="text-xs text-gray-600">{stats.montajProgress}%</div>
+        </div>
+
+        {/* Pending */}
+        <div className="text-center">
+          <div className="text-xs text-gray-500 mb-1">Kutilmoqda</div>
+          <div className="text-lg font-bold text-gray-900">{stats.pending}</div>
+          <div className="text-xs text-gray-600">video</div>
+        </div>
+      </div>
+
+      {/* Progress Bar */}
+      <div className="space-y-1">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-gray-600">Progress</span>
+          <span className={`font-semibold ${getStatusColor(stats.montajProgress)}`}>
+            {stats.montajProgress}%
+          </span>
+        </div>
+        <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+          <div 
+            className={`h-full rounded-full transition-all duration-500 ${
+              stats.montajProgress >= 100 ? 'bg-green-600' :
+              stats.montajProgress >= 70 ? 'bg-blue-600' :
+              stats.montajProgress >= 40 ? 'bg-yellow-500' :
+              'bg-red-600'
+            }`}
+            style={{ width: `${Math.min(stats.montajProgress, 100)}%` }}
+          ></div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function MobilograflarPage() {
   const [mobilographers, setMobilographers] = useState<any[]>([])
   const [projects, setProjects] = useState<any[]>([])
@@ -234,92 +361,84 @@ export default function MobilograflarPage() {
     }
   }
 
-  const getStatusBadge = (progress: number) => {
-    if (progress >= 100) {
-      return { icon: '🎉', label: 'A\'lo', color: 'from-green-500 to-emerald-600', ringColor: 'ring-green-200', bgColor: 'bg-green-50', textColor: 'text-green-700' }
-    } else if (progress >= 70) {
-      return { icon: '🚀', label: 'Yaxshi', color: 'from-blue-500 to-blue-600', ringColor: 'ring-blue-200', bgColor: 'bg-blue-50', textColor: 'text-blue-700' }
-    } else if (progress >= 40) {
-      return { icon: '⚠️', label: 'O\'rtacha', color: 'from-yellow-500 to-orange-500', ringColor: 'ring-yellow-200', bgColor: 'bg-yellow-50', textColor: 'text-yellow-700' }
-    } else {
-      return { icon: '🔴', label: 'Zaif', color: 'from-red-500 to-pink-600', ringColor: 'ring-red-200', bgColor: 'bg-red-50', textColor: 'text-red-700' }
-    }
+  const getStatusLabel = (progress: number) => {
+    if (progress >= 100) return { label: 'Bajarildi', color: 'bg-green-100 text-green-800 border-green-300' }
+    if (progress >= 70) return { label: 'Yaxshi', color: 'bg-blue-100 text-blue-800 border-blue-300' }
+    if (progress >= 40) return { label: 'O\'rtacha', color: 'bg-yellow-100 text-yellow-800 border-yellow-300' }
+    return { label: 'Past', color: 'bg-red-100 text-red-800 border-red-300' }
   }
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <div className="inline-block w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="text-xl text-gray-600">Yuklanmoqda...</p>
+          <div className="inline-block w-12 h-12 border-4 border-gray-300 border-t-gray-600 rounded-full animate-spin mb-4"></div>
+          <p className="text-lg text-gray-600">Yuklanmoqda...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6 animate-slide-in">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="bg-gradient-to-r from-purple-500 to-pink-600 rounded-3xl p-8 text-white shadow-2xl">
+      <div className="bg-white border-b border-gray-300 -mx-6 -mt-6 px-6 py-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold mb-2">👥 Mobilograflar</h1>
-            <p className="text-lg opacity-90">
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">Mobilograflar</h1>
+            <p className="text-sm text-gray-600">
               Faqat MONTAJ POST hisoblanadi
             </p>
           </div>
           <button
             onClick={() => setShowNewForm(!showNewForm)}
-            className="bg-white text-purple-600 px-8 py-4 rounded-2xl font-bold hover:scale-105 transition-transform shadow-xl"
+            className="bg-gray-900 hover:bg-gray-800 text-white px-5 py-2.5 rounded-lg font-medium transition-colors"
           >
-            ➕ Yangi Mobilograf
+            + Yangi Mobilograf
           </button>
         </div>
       </div>
 
-      {/* New Mobilographer Form */}
+      {/* New Form */}
       {showNewForm && (
-        <div className="bg-white rounded-2xl shadow-xl border-2 border-purple-200 p-8 animate-slide-in">
-          <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
-            <span className="text-4xl">📝</span>
-            Yangi Mobilograf Qo'shish
-          </h2>
-          <form onSubmit={handleCreate} className="space-y-6">
+        <div className="bg-white rounded-lg border border-gray-300 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Yangi Mobilograf Qo'shish</h2>
+          <form onSubmit={handleCreate} className="space-y-4">
             <div>
-              <label className="block text-sm font-bold mb-3 text-gray-700">Ism</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Ism</label>
               <input
                 type="text"
                 value={newMobilographer.name}
                 onChange={(e) => setNewMobilographer({ ...newMobilographer, name: e.target.value })}
-                className="w-full px-6 py-4 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all outline-none text-lg"
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-gray-500 focus:ring-2 focus:ring-gray-200 transition-all outline-none"
                 placeholder="Masalan: Og'abek"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-bold mb-3 text-gray-700">Oylik maqsad (jami postlar)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Oylik maqsad (jami postlar)</label>
               <input
                 type="number"
                 min="1"
                 value={newMobilographer.monthly_target}
                 onChange={(e) => setNewMobilographer({ ...newMobilographer, monthly_target: parseInt(e.target.value) })}
-                className="w-full px-6 py-4 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all outline-none text-lg"
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-gray-500 focus:ring-2 focus:ring-gray-200 transition-all outline-none"
                 required
               />
             </div>
 
-            <div className="flex gap-4">
+            <div className="flex gap-3 pt-2">
               <button
                 type="submit"
-                className="flex-1 bg-gradient-to-r from-purple-500 to-pink-600 text-white py-4 rounded-2xl font-bold text-lg hover:scale-105 transition-transform shadow-lg"
+                className="flex-1 bg-gray-900 hover:bg-gray-800 text-white py-2.5 rounded-lg font-medium transition-colors"
               >
-                ✅ Saqlash
+                Saqlash
               </button>
               <button
                 type="button"
                 onClick={() => setShowNewForm(false)}
-                className="px-8 bg-gray-200 text-gray-700 py-4 rounded-2xl font-bold hover:bg-gray-300 transition-colors"
+                className="px-6 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-lg font-medium transition-colors"
               >
                 Bekor qilish
               </button>
@@ -328,48 +447,45 @@ export default function MobilograflarPage() {
         </div>
       )}
 
-      {/* Edit Mobilographer Form */}
+      {/* Edit Form */}
       {editingMobilographer && (
-        <div className="bg-white rounded-2xl shadow-xl border-2 border-blue-200 p-8 animate-slide-in">
-          <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
-            <span className="text-4xl">✏️</span>
-            Tahrirlash: {editingMobilographer.name}
-          </h2>
-          <form onSubmit={handleUpdate} className="space-y-6">
+        <div className="bg-white rounded-lg border border-gray-300 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Tahrirlash: {editingMobilographer.name}</h2>
+          <form onSubmit={handleUpdate} className="space-y-4">
             <div>
-              <label className="block text-sm font-bold mb-3 text-gray-700">Ism</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Ism</label>
               <input
                 type="text"
                 value={editingMobilographer.name}
                 onChange={(e) => setEditingMobilographer({ ...editingMobilographer, name: e.target.value })}
-                className="w-full px-6 py-4 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none text-lg"
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-gray-500 focus:ring-2 focus:ring-gray-200 transition-all outline-none"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-bold mb-3 text-gray-700">Oylik maqsad (jami postlar)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Oylik maqsad (jami postlar)</label>
               <input
                 type="number"
                 min="1"
                 value={editingMobilographer.monthly_target}
                 onChange={(e) => setEditingMobilographer({ ...editingMobilographer, monthly_target: parseInt(e.target.value) })}
-                className="w-full px-6 py-4 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none text-lg"
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-gray-500 focus:ring-2 focus:ring-gray-200 transition-all outline-none"
                 required
               />
             </div>
 
-            <div className="flex gap-4">
+            <div className="flex gap-3 pt-2">
               <button
                 type="submit"
-                className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white py-4 rounded-2xl font-bold text-lg hover:scale-105 transition-transform shadow-lg"
+                className="flex-1 bg-gray-900 hover:bg-gray-800 text-white py-2.5 rounded-lg font-medium transition-colors"
               >
-                ✅ Saqlash
+                Saqlash
               </button>
               <button
                 type="button"
                 onClick={() => setEditingMobilographer(null)}
-                className="px-8 bg-gray-200 text-gray-700 py-4 rounded-2xl font-bold hover:bg-gray-300 transition-colors"
+                className="px-6 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-lg font-medium transition-colors"
               >
                 Bekor qilish
               </button>
@@ -379,193 +495,123 @@ export default function MobilograflarPage() {
       )}
 
       {/* Mobilographers List */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
         {mobilographers.map((mob) => {
-          const status = getStatusBadge(mob.progress)
+          const status = getStatusLabel(mob.progress)
           const isExpanded = expandedMobilographer === mob.id
 
           return (
             <div 
               key={mob.id} 
-              className="bg-white rounded-3xl shadow-xl border-2 border-gray-100 overflow-hidden hover:shadow-2xl transition-all duration-300 hover:scale-[1.02]"
+              className="bg-white rounded-lg border border-gray-300 overflow-hidden hover:border-gray-400 transition-colors"
             >
-              {/* Header with Avatar */}
-              <div className={`bg-gradient-to-r ${status.color} p-8 text-white relative overflow-hidden`}>
-                <div className="absolute top-0 right-0 text-9xl opacity-10">
-                  {status.icon}
+              {/* Header */}
+              <div className="bg-gray-50 border-b border-gray-200 p-5">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1">
+                    <h3 className="text-xl font-semibold text-gray-900 mb-1">{mob.name}</h3>
+                    <p className="text-sm text-gray-600">{mob.projects.length} ta loyiha</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setEditingMobilographer(mob)}
+                      className="text-gray-600 hover:text-gray-900 transition-colors"
+                      title="Tahrirlash"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => handleDelete(mob.id, mob.name)}
+                      className="text-gray-600 hover:text-red-600 transition-colors"
+                      title="O'chirish"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
-                <div className="relative z-10">
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-4">
-                      <div className={`w-20 h-20 bg-white rounded-full flex items-center justify-center text-4xl font-bold bg-gradient-to-br ${status.color} text-white shadow-2xl ring-4 ${status.ringColor}`}>
-                        {mob.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <h3 className="text-2xl font-bold">{mob.name}</h3>
-                        <p className="text-sm opacity-90">{mob.projects.length} ta loyiha</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setEditingMobilographer(mob)}
-                        className="text-white hover:text-yellow-200 text-2xl transition-colors"
-                        title="Tahrirlash"
-                      >
-                        ✏️
-                      </button>
-                      <button
-                        onClick={() => handleDelete(mob.id, mob.name)}
-                        className="text-white hover:text-red-200 text-2xl transition-colors"
-                        title="O'chirish"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </div>
 
-                  <div className={`${status.bgColor} ${status.textColor} px-6 py-3 rounded-2xl inline-block font-bold text-lg`}>
-                    {status.icon} {status.label}
-                  </div>
+                <div className={`inline-block px-3 py-1 rounded-md text-xs font-medium border ${status.color}`}>
+                  {status.label}
                 </div>
               </div>
 
-              {/* Progress Overview */}
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-6">
+              {/* Stats */}
+              <div className="p-5">
+                <div className="flex items-center justify-between mb-4">
                   <div>
-                    <p className="text-sm text-gray-600 mb-1">Umumiy Progress</p>
-                    <p className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                      {mob.progress}%
-                    </p>
+                    <div className="text-sm text-gray-600 mb-1">Umumiy Progress</div>
+                    <div className="text-3xl font-bold text-gray-900">{mob.progress}%</div>
                   </div>
                   <div className="text-right">
-                    <p className="text-2xl font-bold text-gray-800">{mob.totalCompleted}</p>
-                    <p className="text-sm text-gray-600">/ {mob.totalTarget} post</p>
+                    <div className="text-2xl font-bold text-gray-900">{mob.totalCompleted}</div>
+                    <div className="text-sm text-gray-600">/ {mob.totalTarget} post</div>
                   </div>
                 </div>
 
                 {/* Progress Bar */}
-                <div className="relative mb-6">
-                  <div className="h-4 bg-gray-200 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full rounded-full transition-all duration-1000 bg-gradient-to-r ${status.color}`}
-                      style={{ width: `${Math.min(mob.progress, 100)}%` }}
-                    ></div>
+                <div className="h-2 bg-gray-200 rounded-full overflow-hidden mb-5">
+                  <div 
+                    className={`h-full rounded-full transition-all duration-1000 ${
+                      mob.progress >= 100 ? 'bg-green-600' :
+                      mob.progress >= 70 ? 'bg-blue-600' :
+                      mob.progress >= 40 ? 'bg-yellow-500' :
+                      'bg-red-600'
+                    }`}
+                    style={{ width: `${Math.min(mob.progress, 100)}%` }}
+                  ></div>
+                </div>
+
+                {/* Overall Stats */}
+                <div className="grid grid-cols-3 gap-3 mb-5 pb-5 border-b border-gray-200">
+                  <div className="text-center">
+                    <div className="text-xs text-gray-600 mb-1">Syomka</div>
+                    <div className="text-lg font-bold text-gray-900">{mob.totalSyomka}</div>
+                    <div className="text-xs text-gray-500">{mob.syomkaProgress}%</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xs text-gray-600 mb-1">Montaj</div>
+                    <div className="text-lg font-bold text-gray-900">{mob.totalCompleted}</div>
+                    <div className="text-xs text-gray-500">{mob.progress}%</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xs text-gray-600 mb-1">Kutilmoqda</div>
+                    <div className="text-lg font-bold text-gray-900">{mob.totalPending}</div>
+                    <div className="text-xs text-gray-500">video</div>
                   </div>
                 </div>
 
-                {/* Fazalar (Stages) */}
-                <div className="space-y-4 mb-6">
-                  <h4 className="font-bold text-lg text-gray-800 flex items-center gap-2">
-                    🎬 Ish Fazalari
-                  </h4>
-
-                  {/* Syomka Stage */}
-                  <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-2xl p-4 border-2 border-blue-200">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl">📹</span>
-                        <div>
-                          <p className="font-bold text-gray-800">Syomka</p>
-                          <p className="text-xs text-gray-600">Video suratga olish</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xl font-bold text-blue-600">{mob.totalSyomka}</p>
-                        <p className="text-xs text-gray-600">{mob.syomkaProgress}%</p>
-                      </div>
-                    </div>
-                    <div className="h-2 bg-blue-200 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 transition-all duration-500"
-                        style={{ width: `${Math.min(mob.syomkaProgress, 100)}%` }}
-                      ></div>
-                    </div>
-                  </div>
-
-                  {/* Montaj Stage */}
-                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-2xl p-4 border-2 border-purple-200">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl">🎬</span>
-                        <div>
-                          <p className="font-bold text-gray-800">Montaj</p>
-                          <p className="text-xs text-gray-600">Video tahrirlash</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xl font-bold text-purple-600">{mob.totalCompleted}</p>
-                        <p className="text-xs text-gray-600">{mob.progress}%</p>
-                      </div>
-                    </div>
-                    <div className="h-2 bg-purple-200 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full rounded-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500"
-                        style={{ width: `${Math.min(mob.progress, 100)}%` }}
-                      ></div>
-                    </div>
-                  </div>
-
-                  {/* Pending */}
-                  {mob.totalPending > 0 && (
-                    <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-2xl p-4 border-2 border-yellow-200">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-2xl">⏳</span>
-                          <div>
-                            <p className="font-bold text-gray-800">Kutilmoqda</p>
-                            <p className="text-xs text-gray-600">Montaj navbatda</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xl font-bold text-yellow-600">{mob.totalPending}</p>
-                          <p className="text-xs text-gray-600">video</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Loyihalar */}
-                <div className="mb-4">
-                  <h4 className="font-bold text-lg mb-3 flex items-center gap-2">
-                    📁 Loyihalar:
-                    {mob.projects.length === 0 && (
-                      <span className="text-sm text-gray-500 font-normal">(Yo'q)</span>
-                    )}
+                {/* Projects */}
+                <div>
+                  <h4 className="font-semibold text-gray-900 text-sm mb-3">
+                    Loyihalar {mob.projects.length === 0 && '(Yo\'q)'}
                   </h4>
 
                   {mob.projects.length > 0 ? (
-                    <div className="space-y-2">
-                      {mob.projects.slice(0, isExpanded ? undefined : 3).map((project: any) => (
-                        <div key={project.id} className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-3 border-2 border-gray-200 hover:border-purple-300 transition-all">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="font-bold text-gray-800">{project.name}</p>
-                              <p className="text-xs text-gray-600">🎯 {project.monthly_target} post/oy</p>
-                            </div>
-                            <button
-                              onClick={() => handleReassignProject(project.id, project.name, mob.id)}
-                              className="text-blue-500 hover:text-blue-700 text-sm font-semibold transition-colors"
-                              title="Boshqa mobilografga o'tkazish"
-                            >
-                              🔄
-                            </button>
-                          </div>
-                        </div>
+                    <div className="space-y-3">
+                      {mob.projects.slice(0, isExpanded ? undefined : 2).map((project: any) => (
+                        <ProjectCard 
+                          key={project.id} 
+                          project={project} 
+                          mobId={mob.id}
+                          onReassign={handleReassignProject}
+                        />
                       ))}
-                      {mob.projects.length > 3 && (
+                      {mob.projects.length > 2 && (
                         <button
                           onClick={() => setExpandedMobilographer(isExpanded ? null : mob.id)}
-                          className="w-full text-purple-600 hover:text-purple-800 text-sm font-semibold py-2"
+                          className="w-full text-gray-600 hover:text-gray-900 text-sm font-medium py-2 transition-colors"
                         >
-                          {isExpanded ? '▲ Kamroq ko\'rish' : `▼ Yana ${mob.projects.length - 3} ta loyiha`}
+                          {isExpanded ? '▲ Kamroq ko\'rish' : `▼ Yana ${mob.projects.length - 2} ta loyiha`}
                         </button>
                       )}
                     </div>
                   ) : (
-                    <div className="text-center py-6 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
-                      <p className="text-gray-400 text-sm">Hali loyihalar yo'q</p>
+                    <div className="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                      <p className="text-gray-500 text-sm">Loyihalar yo'q</p>
                     </div>
                   )}
                 </div>
@@ -576,18 +622,11 @@ export default function MobilograflarPage() {
       </div>
 
       {mobilographers.length === 0 && (
-        <div className="text-center py-20 bg-gradient-to-br from-purple-50 to-pink-50 rounded-3xl border-2 border-dashed border-purple-300">
-          <div className="text-9xl mb-6">👥</div>
-          <p className="text-gray-600 text-2xl font-bold mb-3">Hali mobilograflar yo'q</p>
-          <p className="text-gray-500 text-lg mb-6">
+        <div className="text-center py-16 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+          <p className="text-gray-600 text-lg font-medium mb-2">Mobilograflar yo'q</p>
+          <p className="text-gray-500 text-sm mb-6">
             Yangi mobilograf qo'shish uchun yuqoridagi tugmani bosing
           </p>
-          <button
-            onClick={() => setShowNewForm(true)}
-            className="bg-gradient-to-r from-purple-500 to-pink-600 text-white px-8 py-4 rounded-2xl font-bold hover:scale-105 transition-transform shadow-xl inline-block"
-          >
-            ➕ Birinchi Mobilografni Qo'shish
-          </button>
         </div>
       )}
     </div>
