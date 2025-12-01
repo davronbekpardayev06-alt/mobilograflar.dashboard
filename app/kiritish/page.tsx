@@ -10,6 +10,7 @@ interface GroupedRecord {
   totalPost: number
   totalStoris: number
   totalSyomka: number
+  totalTahrirlash: number
 }
 
 export default function KiritishPage() {
@@ -154,7 +155,8 @@ export default function KiritishPage() {
           records: [],
           totalPost: 0,
           totalStoris: 0,
-          totalSyomka: 0
+          totalSyomka: 0,
+          totalTahrirlash: 0
         })
       }
 
@@ -170,6 +172,8 @@ export default function KiritishPage() {
         }
       } else if (record.type === 'filming') {
         group.totalSyomka += count
+      } else if (record.type === 'tahrirlash') {
+        group.totalTahrirlash += count
       }
     })
 
@@ -284,8 +288,9 @@ export default function KiritishPage() {
       return
     }
 
-    if (newRecord.type === 'editing' && (!newRecord.start_time || !newRecord.end_time)) {
-      alert('Montaj uchun boshlangan va tugagan vaqtni kiriting!')
+    if (!newRecord.start_time || !newRecord.end_time) {
+      const typeName = newRecord.type === 'editing' ? 'Montaj' : newRecord.type === 'filming' ? 'Syomka' : 'Tahrirlash'
+      alert(`${typeName} uchun boshlangan va tugagan vaqtni kiriting!`)
       return
     }
 
@@ -304,7 +309,7 @@ export default function KiritishPage() {
           mobilographer_id: newRecord.mobilographer_id,
           project_id: newRecord.project_id,
           type: newRecord.type,
-          content_type: newRecord.content_type,
+          content_type: newRecord.type === 'editing' ? newRecord.content_type : null,
           date: newRecord.date,
           time: newRecord.time || null,
           start_time: newRecord.start_time || null,
@@ -339,6 +344,7 @@ export default function KiritishPage() {
             .update({ 
               editing_status: 'completed',
               content_type: newRecord.content_type,
+              task_type: 'montaj',
               record_id: recordId,
               work_date: workDate.toISOString()
             })
@@ -378,8 +384,33 @@ export default function KiritishPage() {
         await supabase.from('videos').insert(videosToInsert)
       }
 
+      if (newRecord.type === 'tahrirlash') {
+        // Tahrirlash - mijoz qaytargan video
+        // Bu loyiha maqsadiga hisoblanmaydi, faqat vaqt/ball hisoblanadi
+        const videosToInsert = []
+        for (let i = 0; i < newRecord.count; i++) {
+          videosToInsert.push({
+            project_id: newRecord.project_id,
+            name: `Video ${Date.now()}-${i + 1}`,
+            filming_status: 'completed',
+            editing_status: 'completed',
+            content_type: null, // Tahrirlash uchun content_type yo'q
+            task_type: 'tahrirlash',
+            record_id: recordId,
+            work_date: workDate.toISOString()
+          })
+        }
+        await supabase.from('videos').insert(videosToInsert)
+      }
+
       const durationText = durationMinutes ? ` (${formatDuration(durationMinutes)})` : ''
-      alert(`✅ ${newRecord.count} ta ${newRecord.type === 'editing' ? newRecord.content_type === 'post' ? 'post' : 'storis' : 'syomka'} muvaffaqiyatli qo'shildi!${durationText}\n\n📅 ${getMonthName(newRecord.work_month)} ${newRecord.work_year} uchun saqland i!`)
+      const typeText = newRecord.type === 'editing' 
+        ? (newRecord.content_type === 'post' ? 'post' : 'storis') 
+        : newRecord.type === 'tahrirlash' 
+        ? 'tahrirlash (qaytarilgan)' 
+        : 'syomka'
+      
+      alert(`✅ ${newRecord.count} ta ${typeText} muvaffaqiyatli qo'shildi!${durationText}\n\n📅 ${getMonthName(newRecord.work_month)} ${newRecord.work_year} uchun saqlandi!`)
       
       setNewRecord({
         mobilographer_id: '',
@@ -462,7 +493,7 @@ export default function KiritishPage() {
               </div>
             </div>
 
-            {/* YANGI: Qaysi oy uchun */}
+            {/* Qaysi oy uchun */}
             <div className="bg-gradient-to-br from-blue-50 to-purple-50 border-2 border-blue-300 rounded-2xl p-6">
               <label className="block text-lg font-bold mb-4 text-gray-800 flex items-center gap-2">
                 📅 Qaysi oy uchun?
@@ -547,7 +578,19 @@ export default function KiritishPage() {
               <label className="block text-sm font-semibold mb-3 text-gray-700">
                 🎬 Ish turi
               </label>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
+                <button
+                  type="button"
+                  onClick={() => setNewRecord({ ...newRecord, type: 'filming' })}
+                  className={`py-6 rounded-2xl font-bold text-lg transition-all duration-200 transform hover:scale-105 ${
+                    newRecord.type === 'filming'
+                      ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-2xl scale-105'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  <div className="text-4xl mb-2">📹</div>
+                  Syomka
+                </button>
                 <button
                   type="button"
                   onClick={() => setNewRecord({ ...newRecord, type: 'editing' })}
@@ -562,15 +605,16 @@ export default function KiritishPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setNewRecord({ ...newRecord, type: 'filming' })}
+                  onClick={() => setNewRecord({ ...newRecord, type: 'tahrirlash' })}
                   className={`py-6 rounded-2xl font-bold text-lg transition-all duration-200 transform hover:scale-105 ${
-                    newRecord.type === 'filming'
-                      ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-2xl scale-105'
+                    newRecord.type === 'tahrirlash'
+                      ? 'bg-gradient-to-br from-yellow-500 to-amber-500 text-white shadow-2xl scale-105'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
-                  <div className="text-4xl mb-2">📹</div>
-                  Syomka
+                  <div className="text-4xl mb-2">✂️</div>
+                  Tahrirlash
+                  <div className="text-xs mt-1 opacity-90">Mijoz qaytardi</div>
                 </button>
               </div>
             </div>
@@ -625,7 +669,7 @@ export default function KiritishPage() {
                         value={newRecord.start_time}
                         onChange={(e) => setNewRecord({ ...newRecord, start_time: e.target.value })}
                         className="w-full px-4 py-3 rounded-xl border-2 border-blue-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none text-lg font-semibold"
-                        required={newRecord.type === 'editing'}
+                        required
                       />
                     </div>
                     <div>
@@ -637,7 +681,7 @@ export default function KiritishPage() {
                         value={newRecord.end_time}
                         onChange={(e) => setNewRecord({ ...newRecord, end_time: e.target.value })}
                         className="w-full px-4 py-3 rounded-xl border-2 border-blue-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none text-lg font-semibold"
-                        required={newRecord.type === 'editing'}
+                        required
                       />
                     </div>
                   </div>
@@ -652,9 +696,106 @@ export default function KiritishPage() {
               </>
             )}
 
+            {newRecord.type === 'filming' && (
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-2xl p-6">
+                <label className="block text-lg font-bold mb-4 text-gray-800 flex items-center gap-2">
+                  ⏱️ Syomka vaqti (Majburiy)
+                </label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold mb-2 text-gray-700">
+                      🟢 Boshlangan vaqt
+                    </label>
+                    <input
+                      type="time"
+                      value={newRecord.start_time}
+                      onChange={(e) => setNewRecord({ ...newRecord, start_time: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border-2 border-blue-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none text-lg font-semibold"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-2 text-gray-700">
+                      🔴 Tugagan vaqt
+                    </label>
+                    <input
+                      type="time"
+                      value={newRecord.end_time}
+                      onChange={(e) => setNewRecord({ ...newRecord, end_time: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border-2 border-blue-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none text-lg font-semibold"
+                      required
+                    />
+                  </div>
+                </div>
+                {newRecord.start_time && newRecord.end_time && (
+                  <div className="mt-4 bg-white rounded-xl p-4 border-2 border-blue-200">
+                    <p className="text-center text-lg font-bold text-gray-800">
+                      ⏳ Jami: <span className="text-blue-600">{calculateDuration(newRecord.start_time, newRecord.end_time).text}</span>
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {newRecord.type === 'tahrirlash' && (
+              <div className="bg-gradient-to-br from-yellow-50 to-amber-50 border-2 border-yellow-300 rounded-2xl p-6">
+                <label className="block text-lg font-bold mb-4 text-gray-800 flex items-center gap-2">
+                  ⏱️ Tahrirlash vaqti (Majburiy)
+                </label>
+                <p className="text-sm text-gray-600 mb-4">
+                  Mijoz qaytargan video uchun o'zgartirish vaqti. <strong>Loyiha maqsadiga hisoblanmaydi,</strong> lekin vaqt/ball statistikada ko'rinadi.
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold mb-2 text-gray-700">
+                      🟢 Boshlangan vaqt
+                    </label>
+                    <input
+                      type="time"
+                      value={newRecord.start_time}
+                      onChange={(e) => setNewRecord({ ...newRecord, start_time: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border-2 border-yellow-200 focus:border-yellow-500 focus:ring-4 focus:ring-yellow-100 transition-all outline-none text-lg font-semibold"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-2 text-gray-700">
+                      🔴 Tugagan vaqt
+                    </label>
+                    <input
+                      type="time"
+                      value={newRecord.end_time}
+                      onChange={(e) => setNewRecord({ ...newRecord, end_time: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border-2 border-yellow-200 focus:border-yellow-500 focus:ring-4 focus:ring-yellow-100 transition-all outline-none text-lg font-semibold"
+                      required
+                    />
+                  </div>
+                </div>
+                {newRecord.start_time && newRecord.end_time && (
+                  <div className="mt-4 bg-white rounded-xl p-4 border-2 border-yellow-200">
+                    <p className="text-center text-lg font-bold text-gray-800">
+                      ⏳ Jami: <span className="text-yellow-600">{calculateDuration(newRecord.start_time, newRecord.end_time).text}</span>
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-yellow-300 rounded-2xl p-6">
               <label className="block text-lg font-bold mb-3 text-gray-800">
-                🔢 Nechta {newRecord.type === 'editing' ? newRecord.content_type === 'post' ? 'post' : 'storis' : 'video'} {newRecord.type === 'editing' ? 'montaj qilindi' : 'suratga olindi'}?
+                🔢 Nechta {
+                  newRecord.type === 'editing' 
+                    ? (newRecord.content_type === 'post' ? 'post' : 'storis') 
+                    : newRecord.type === 'tahrirlash' 
+                    ? 'video' 
+                    : 'video'
+                } {
+                  newRecord.type === 'editing' 
+                    ? 'montaj qilindi' 
+                    : newRecord.type === 'tahrirlash' 
+                    ? 'tahrirlandi (qaytarilgan)' 
+                    : 'suratga olindi'
+                }?
               </label>
               <div className="flex items-center gap-4">
                 <button
@@ -682,7 +823,13 @@ export default function KiritishPage() {
                 </button>
               </div>
               <p className="text-center text-lg font-semibold text-gray-700 mt-4">
-                {newRecord.count} ta {newRecord.type === 'editing' ? newRecord.content_type === 'post' ? '📄 post' : '📱 storis' : '📹 video'}
+                {newRecord.count} ta {
+                  newRecord.type === 'editing' 
+                    ? (newRecord.content_type === 'post' ? '📄 post' : '📱 storis') 
+                    : newRecord.type === 'tahrirlash' 
+                    ? '✂️ video (qaytarilgan)' 
+                    : '📹 video'
+                }
               </p>
             </div>
 
@@ -823,7 +970,7 @@ export default function KiritishPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="grid grid-cols-4 gap-3 mb-4">
                   {group.totalPost > 0 && (
                     <div className="bg-green-50 border-2 border-green-200 rounded-lg p-3 text-center">
                       <div className="text-3xl font-bold text-green-600">{group.totalPost}</div>
@@ -842,6 +989,12 @@ export default function KiritishPage() {
                       <div className="text-xs text-blue-700">📹 Syomka</div>
                     </div>
                   )}
+                  {group.totalTahrirlash > 0 && (
+                    <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-3 text-center">
+                      <div className="text-3xl font-bold text-yellow-600">{group.totalTahrirlash}</div>
+                      <div className="text-xs text-yellow-700">✂️ Tahrirlash</div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -851,13 +1004,15 @@ export default function KiritishPage() {
                         <div className="text-2xl">
                           {record.type === 'editing' 
                             ? record.content_type === 'post' ? '📄' : '📱'
-                            : '📹'}
+                            : record.type === 'tahrirlash' ? '✂️' : '📹'}
                         </div>
                         <div>
                           <p className="font-semibold">
-                            {record.count || 1}x {record.type === 'editing' 
-                              ? record.content_type === 'post' ? 'Post' : 'Storis'
-                              : 'Syomka'}
+                            {record.count || 1}x {
+                              record.type === 'editing' 
+                                ? record.content_type === 'post' ? 'Post' : 'Storis'
+                                : record.type === 'tahrirlash' ? 'Tahrirlash' : 'Syomka'
+                            }
                           </p>
                           <p className="text-xs text-gray-500">
                             {new Date(record.date).toLocaleDateString('uz-UZ', {
