@@ -82,27 +82,26 @@ function ProjectCard({ project, mobId, onReassign }: any) {
         </button>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-3 gap-3 mb-4">
-        {/* Syomka */}
-        <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-3 border border-blue-200">
-          <div className="text-2xl mb-1">📹</div>
-          <div className="text-lg font-bold text-gray-900">{stats.syomka}<span className="text-sm text-gray-500">/{project.monthly_target}</span></div>
-          <div className="text-xs text-gray-600">Syomka</div>
+      {/* Stats */}
+      <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4 border border-purple-200 mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">🎬</span>
+            <div>
+              <p className="font-semibold text-gray-900">Post Montaj</p>
+              <p className="text-xs text-gray-600">Montaj qilingan postlar</p>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-xl font-bold text-gray-900">{stats.montaj}<span className="text-sm text-gray-500">/{project.monthly_target}</span></p>
+            <p className="text-xs text-gray-600">{stats.montajProgress}%</p>
+          </div>
         </div>
-
-        {/* Montaj */}
-        <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-3 border border-purple-200">
-          <div className="text-2xl mb-1">🎬</div>
-          <div className="text-lg font-bold text-gray-900">{stats.montaj}<span className="text-sm text-gray-500">/{project.monthly_target}</span></div>
-          <div className="text-xs text-gray-600">Montaj</div>
-        </div>
-
-        {/* Pending */}
-        <div className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-xl p-3 border border-yellow-200">
-          <div className="text-2xl mb-1">⏳</div>
-          <div className="text-lg font-bold text-gray-900">{stats.pending}</div>
-          <div className="text-xs text-gray-600">Kutish</div>
+        <div className="h-2 bg-purple-200 rounded-full overflow-hidden">
+          <div 
+            className="h-full bg-gradient-to-r from-purple-400 to-pink-500 rounded-full transition-all duration-500"
+            style={{ width: `${Math.min(stats.montajProgress, 100)}%` }}
+          ></div>
         </div>
       </div>
 
@@ -641,21 +640,19 @@ export default function MobilograflarPage() {
                 </div>
 
                 {/* Stats */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-3 border border-blue-200 text-center">
-                    <div className="text-2xl mb-1">📹</div>
-                    <div className="text-lg font-bold text-gray-900">{mob.totalSyomka}</div>
-                    <div className="text-xs text-gray-600">Syomka</div>
-                  </div>
-                  <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-3 border border-purple-200 text-center">
-                    <div className="text-2xl mb-1">🎬</div>
-                    <div className="text-lg font-bold text-gray-900">{mob.totalCompleted}</div>
-                    <div className="text-xs text-gray-600">Montaj</div>
-                  </div>
-                  <div className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-xl p-3 border border-yellow-200 text-center">
-                    <div className="text-2xl mb-1">⏳</div>
-                    <div className="text-lg font-bold text-gray-900">{mob.totalPending}</div>
-                    <div className="text-xs text-gray-600">Kutish</div>
+                <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-5 border border-purple-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="text-4xl">🎬</div>
+                      <div>
+                        <p className="font-semibold text-gray-900 text-lg">Post Montaj</p>
+                        <p className="text-xs text-gray-600">Montaj qilingan postlar</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-3xl font-bold text-gray-900">{mob.totalCompleted}</p>
+                      <p className="text-sm text-gray-600">/ {mob.totalTarget} post</p>
+                    </div>
                   </div>
                 </div>
 
