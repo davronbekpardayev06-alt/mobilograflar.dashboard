@@ -16,7 +16,6 @@ function ProjectCard({ project, mobId, selectedYear, selectedMonth, onReassign }
       const firstDay = new Date(selectedYear, selectedMonth - 1, 1)
       const lastDay = new Date(selectedYear, selectedMonth, 0, 23, 59, 59, 999)
 
-      // Use work_date instead of created_at
       const { data: videos } = await supabase
         .from('videos')
         .select('*')
@@ -24,22 +23,16 @@ function ProjectCard({ project, mobId, selectedYear, selectedMonth, onReassign }
         .gte('work_date', firstDay.toISOString())
         .lte('work_date', lastDay.toISOString())
 
-      const syomka = videos?.filter(v => v.filming_status === 'completed').length || 0
       const montaj = videos?.filter(
         v => v.record_id !== null && 
              v.editing_status === 'completed' && 
              v.content_type === 'post' && 
              v.task_type === 'montaj'
       ).length || 0
-      const pending = videos?.filter(
-        v => v.editing_status === 'pending' && 
-             v.content_type === 'post'
-      ).length || 0
 
       const montajProgress = project.monthly_target > 0 ? Math.round((montaj / project.monthly_target) * 100) : 0
-      const syomkaProgress = project.monthly_target > 0 ? Math.round((syomka / project.monthly_target) * 100) : 0
 
-      setStats({ syomka, montaj, pending, montajProgress, syomkaProgress })
+      setStats({ montaj, montajProgress })
       setLoading(false)
     } catch (error) {
       console.error('Error fetching project stats:', error)
@@ -67,7 +60,6 @@ function ProjectCard({ project, mobId, selectedYear, selectedMonth, onReassign }
 
   return (
     <div className="bg-white rounded-2xl p-4 border border-gray-200 hover:border-purple-300 hover:shadow-lg transition-all duration-300">
-      {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1">
           <h4 className="font-semibold text-gray-900 text-base mb-1">{project.name}</h4>
@@ -82,7 +74,6 @@ function ProjectCard({ project, mobId, selectedYear, selectedMonth, onReassign }
         </button>
       </div>
 
-      {/* Big Number Progress */}
       <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-5 border border-purple-200 mb-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
@@ -108,7 +99,6 @@ function ProjectCard({ project, mobId, selectedYear, selectedMonth, onReassign }
         </div>
       </div>
 
-      {/* Overall Progress */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-xs text-gray-600">Progress</span>
@@ -135,7 +125,6 @@ export default function MobilograflarPage() {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear())
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1)
   const [availableYears, setAvailableYears] = useState<number[]>([])
-  const [showInactive, setShowInactive] = useState(false)
   const [newMobilographer, setNewMobilographer] = useState({
     name: ''
   })
@@ -146,11 +135,10 @@ export default function MobilograflarPage() {
 
   useEffect(() => {
     fetchData()
-  }, [selectedYear, selectedMonth, showInactive])
+  }, [selectedYear, selectedMonth])
 
   const loadAvailableYears = async () => {
     try {
-      // Use work_date instead of created_at
       const { data: videos } = await supabase
         .from('videos')
         .select('work_date')
@@ -178,36 +166,58 @@ export default function MobilograflarPage() {
 
   const fetchData = async () => {
     try {
-      let query = supabase
-        .from('mobilographers')
-        .select('*')
-        .order('name')
-
-      if (!showInactive) {
-        query = query.eq('is_active', true)
-      }
-
-      const { data: mobilographersData } = await query
-
-      const { data: projectsData } = await supabase
-        .from('projects')
-        .select('*')
-        .order('name')
-
       const firstDay = new Date(selectedYear, selectedMonth - 1, 1)
       const lastDay = new Date(selectedYear, selectedMonth, 0, 23, 59, 59, 999)
 
+      // Get videos that were worked on in selected period
+      const { data: videosInPeriod } = await supabase
+        .from('videos')
+        .select('project_id')
+        .gte('work_date', firstDay.toISOString())
+        .lte('work_date', lastDay.toISOString())
+
+      if (!videosInPeriod || videosInPeriod.length === 0) {
+        setMobilographers([])
+        setProjects([])
+        setLoading(false)
+        return
+      }
+
+      // Get unique project IDs
+      const projectIds = [...new Set(videosInPeriod.map(v => v.project_id))]
+
+      // Get projects with mobilographers
+      const { data: projectsData } = await supabase
+        .from('projects')
+        .select('*')
+        .in('id', projectIds)
+
+      if (!projectsData || projectsData.length === 0) {
+        setMobilographers([])
+        setProjects([])
+        setLoading(false)
+        return
+      }
+
+      // Get unique mobilographer IDs
+      const mobIds = [...new Set(projectsData.map(p => p.mobilographer_id))]
+
+      // Get mobilographers (both active and inactive)
+      const { data: mobilographersData } = await supabase
+        .from('mobilographers')
+        .select('*')
+        .in('id', mobIds)
+        .order('name')
+
+      // Calculate stats for each mobilographer
       const mobilographersWithStats = await Promise.all(
         (mobilographersData || []).map(async (mob) => {
           const mobProjects = projectsData?.filter(p => p.mobilographer_id === mob.id) || []
 
           let totalCompleted = 0
           let totalTarget = 0
-          let totalSyomka = 0
-          let totalPending = 0
 
           for (const project of mobProjects) {
-            // Use work_date instead of created_at
             const { data: videos } = await supabase
               .from('videos')
               .select('*')
@@ -215,35 +225,24 @@ export default function MobilograflarPage() {
               .gte('work_date', firstDay.toISOString())
               .lte('work_date', lastDay.toISOString())
 
-            const syomka = videos?.filter(v => v.filming_status === 'completed').length || 0
             const completed = videos?.filter(
               v => v.record_id !== null && 
                    v.editing_status === 'completed' && 
                    v.content_type === 'post' && 
                    v.task_type === 'montaj'
             ).length || 0
-            const pending = videos?.filter(
-              v => v.editing_status === 'pending' && 
-                   v.content_type === 'post'
-            ).length || 0
 
-            totalSyomka += syomka
             totalCompleted += completed
-            totalPending += pending
             totalTarget += project.monthly_target || 0
           }
 
           const progress = totalTarget > 0 ? Math.round((totalCompleted / totalTarget) * 100) : 0
-          const syomkaProgress = totalTarget > 0 ? Math.round((totalSyomka / totalTarget) * 100) : 0
 
           return {
             ...mob,
             projects: mobProjects,
             totalCompleted,
             totalTarget,
-            totalSyomka,
-            totalPending,
-            syomkaProgress,
             progress
           }
         })
@@ -310,7 +309,7 @@ export default function MobilograflarPage() {
   }
 
   const handleDeactivate = async (id: string, name: string) => {
-    if (!confirm(`"${name}" mobilografni aktiv emasga o'tkazmoqchimisiz?\n\nDIQQAT: Uning barcha o'tgan ishlari va ma'lumotlari saqlanadi, lekin ro'yxatda ko'rinmaydi.`)) {
+    if (!confirm(`"${name}" mobilografni aktiv emasga o'tkazmoqchimisiz?\n\nDIQQAT: Uning barcha o'tgan ishlari va ma'lumotlari saqlanadi, lekin hozirgi oyda ish qilmasa ko'rinmaydi.`)) {
       return
     }
 
@@ -344,7 +343,7 @@ export default function MobilograflarPage() {
   }
 
   const handlePermanentDelete = async (id: string, name: string) => {
-    if (!confirm(`"${name}" mobilografni BUTUNLAY o'chirmoqchimisiz?\n\nDIQQAT: Uning barcha loyihalari, videolari va yozuvlari ham O'CHADI! Bu amalni bekor qilib bo'lmaydi!\n\nILTIMOS: Agar faqat ro'yxatdan olib tashlash kerak bo'lsa, "Aktiv emasga o'tkazish" tugmasini ishlating.`)) {
+    if (!confirm(`"${name}" mobilografni BUTUNLAY o'chirmoqchimisiz?\n\nDIQQAT: Uning barcha loyihalari, videolari va yozuvlari ham O'CHADI! Bu amalni bekor qilib bo'lmaydi!`)) {
       return
     }
 
@@ -393,7 +392,14 @@ export default function MobilograflarPage() {
   }
 
   const handleReassignProject = async (projectId: string, projectName: string, currentMobId: string) => {
-    const otherMobilographers = mobilographers.filter(m => m.id !== currentMobId && m.is_active)
+    // Get all active mobilographers
+    const { data: allActiveMobs } = await supabase
+      .from('mobilographers')
+      .select('*')
+      .eq('is_active', true)
+      .order('name')
+
+    const otherMobilographers = (allActiveMobs || []).filter(m => m.id !== currentMobId)
     
     if (otherMobilographers.length === 0) {
       alert('Boshqa aktiv mobilograf yo\'q!')
@@ -444,7 +450,10 @@ export default function MobilograflarPage() {
     return months[monthNum - 1]
   }
 
-  const getStatusBadge = (progress: number) => {
+  const getStatusBadge = (progress: number, isActive: boolean) => {
+    if (!isActive) {
+      return { emoji: '⚪', label: 'Aktiv emas', color: 'from-gray-400 to-gray-500', bg: 'bg-gradient-to-br from-gray-50 to-gray-100', border: 'border-gray-300', text: 'text-gray-700' }
+    }
     if (progress >= 100) {
       return { emoji: '🎉', label: 'Bajarildi', color: 'from-green-400 to-emerald-500', bg: 'bg-gradient-to-br from-green-50 to-emerald-50', border: 'border-green-300', text: 'text-green-700' }
     } else if (progress >= 70) {
@@ -489,7 +498,7 @@ export default function MobilograflarPage() {
 
       {/* Filters */}
       <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-lg">
-        <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
               <span className="text-xl">📅</span>
@@ -521,20 +530,6 @@ export default function MobilograflarPage() {
               ))}
             </select>
           </div>
-        </div>
-
-        <div className="flex items-center gap-3 pt-4 border-t border-gray-200">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={showInactive}
-              onChange={(e) => setShowInactive(e.target.checked)}
-              className="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-            />
-            <span className="text-sm font-semibold text-gray-700">
-              Aktiv emas mobilograflarni ham ko'rish
-            </span>
-          </label>
         </div>
       </div>
 
@@ -612,7 +607,7 @@ export default function MobilograflarPage() {
       {/* Mobilographers Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
         {mobilographers.map((mob) => {
-          const status = getStatusBadge(mob.progress)
+          const status = getStatusBadge(mob.progress, mob.is_active)
           const isExpanded = expandedMobilographer === mob.id
           const isInactive = !mob.is_active
 
@@ -620,7 +615,7 @@ export default function MobilograflarPage() {
             <div 
               key={mob.id} 
               className={`bg-white rounded-3xl border overflow-hidden hover:border-gray-300 transition-all duration-300 shadow-lg hover:shadow-2xl hover:scale-[1.02] ${
-                isInactive ? 'border-gray-400 opacity-60' : 'border-gray-200'
+                isInactive ? 'border-gray-400 opacity-75' : 'border-gray-200'
               }`}
             >
               {/* Header */}
@@ -702,12 +697,10 @@ export default function MobilograflarPage() {
                   </div>
                 </div>
 
-                {!isInactive && (
-                  <div className={`inline-flex items-center gap-2 ${status.bg} ${status.text} px-4 py-2 rounded-xl text-sm font-semibold border-2 ${status.border}`}>
-                    <span className="text-lg">{status.emoji}</span>
-                    {status.label}
-                  </div>
-                )}
+                <div className={`inline-flex items-center gap-2 ${status.bg} ${status.text} px-4 py-2 rounded-xl text-sm font-semibold border-2 ${status.border}`}>
+                  <span className="text-lg">{status.emoji}</span>
+                  {status.label}
+                </div>
               </div>
 
               {/* Content */}
@@ -747,47 +740,38 @@ export default function MobilograflarPage() {
                 </div>
 
                 {/* Projects */}
-                {mob.is_active && (
-                  <div>
-                    <h4 className="font-semibold text-gray-900 text-sm mb-3 flex items-center gap-2">
-                      📁 Loyihalar {mob.projects.length === 0 && <span className="text-gray-400">(Yo'q)</span>}
-                    </h4>
+                <div>
+                  <h4 className="font-semibold text-gray-900 text-sm mb-3 flex items-center gap-2">
+                    📁 Loyihalar {mob.projects.length === 0 && <span className="text-gray-400">(Yo'q)</span>}
+                  </h4>
 
-                    {mob.projects.length > 0 ? (
-                      <div className="space-y-3">
-                        {mob.projects.slice(0, isExpanded ? undefined : 2).map((project: any) => (
-                          <ProjectCard 
-                            key={project.id} 
-                            project={project} 
-                            mobId={mob.id}
-                            selectedYear={selectedYear}
-                            selectedMonth={selectedMonth}
-                            onReassign={handleReassignProject}
-                          />
-                        ))}
-                        {mob.projects.length > 2 && (
-                          <button
-                            onClick={() => setExpandedMobilographer(isExpanded ? null : mob.id)}
-                            className="w-full text-gray-600 hover:text-gray-900 text-sm font-medium py-2 transition-colors"
-                          >
-                            {isExpanded ? '▲ Kamroq ko\'rish' : `▼ Yana ${mob.projects.length - 2} ta ko'rish`}
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-                        <p className="text-gray-400 text-sm">Loyihalar yo'q</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {!mob.is_active && (
-                  <div className="text-center py-6 bg-gray-100 rounded-xl">
-                    <p className="text-gray-600 text-sm">Bu mobilograf aktiv emas</p>
-                    <p className="text-gray-500 text-xs mt-1">Qayta aktivlashtirish uchun yuqoridagi tugmani bosing</p>
-                  </div>
-                )}
+                  {mob.projects.length > 0 ? (
+                    <div className="space-y-3">
+                      {mob.projects.slice(0, isExpanded ? undefined : 2).map((project: any) => (
+                        <ProjectCard 
+                          key={project.id} 
+                          project={project} 
+                          mobId={mob.id}
+                          selectedYear={selectedYear}
+                          selectedMonth={selectedMonth}
+                          onReassign={handleReassignProject}
+                        />
+                      ))}
+                      {mob.projects.length > 2 && (
+                        <button
+                          onClick={() => setExpandedMobilographer(isExpanded ? null : mob.id)}
+                          className="w-full text-gray-600 hover:text-gray-900 text-sm font-medium py-2 transition-colors"
+                        >
+                          {isExpanded ? '▲ Kamroq ko\'rish' : `▼ Yana ${mob.projects.length - 2} ta ko'rish`}
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                      <p className="text-gray-400 text-sm">Loyihalar yo'q</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )
@@ -798,10 +782,10 @@ export default function MobilograflarPage() {
         <div className="text-center py-20 bg-gradient-to-br from-gray-50 to-gray-100 rounded-3xl border-2 border-dashed border-gray-300">
           <div className="text-7xl mb-6">👥</div>
           <p className="text-gray-700 text-xl font-semibold mb-2">
-            {showInactive ? 'Aktiv emas mobilograflar yo\'q' : 'Mobilograflar yo\'q'}
+            {getMonthName(selectedMonth)} {selectedYear} da ish qilinmagan
           </p>
           <p className="text-gray-500 text-sm mb-6">
-            Yangi mobilograf qo'shish uchun yuqoridagi tugmani bosing
+            Bu oyda hech kim ish qilmagan yoki ma'lumot kiritilmagan
           </p>
         </div>
       )}
