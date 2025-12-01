@@ -1,78 +1,115 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 
 export default function LoyihalarPage() {
   const [projects, setProjects] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear())
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1)
+  const [availableYears, setAvailableYears] = useState<number[]>([])
+  const [showNewProjectForm, setShowNewProjectForm] = useState(false)
+  const [newProject, setNewProject] = useState({
+    name: '',
+    mobilographer_id: '',
+    monthly_target: 6
+  })
+  const [mobilographers, setMobilographers] = useState<any[]>([])
 
   useEffect(() => {
-    fetchData()
+    fetchMobilographers()
+    loadAvailableYears()
   }, [])
 
-  const fetchData = async () => {
+  useEffect(() => {
+    fetchProjects()
+  }, [selectedYear, selectedMonth])
+
+  const loadAvailableYears = async () => {
     try {
-      const { data } = await supabase
-        .from('projects')
-        .select(`
-          *,
-          mobilographers(name),
-          videos(id, editing_status, filming_status, content_type, task_type, deadline, created_at, record_id)
-        `)
-        .order('name')
+      const { data: videos } = await supabase
+        .from('videos')
+        .select('created_at')
+        .order('created_at', { ascending: false })
 
-      const projectsWithProgress = data?.map(project => {
-        // FAQAT SHU OYNING MONTAJ POST'LARINI HISOBLASH - FAQAT KIRITISHDAN!
-        const now = new Date()
-        const currentMonth = now.getMonth()
-        const currentYear = now.getFullYear()
-        
-        const thisMonthVideos = project.videos?.filter((v: any) => {
-          // FAQAT MONTAJ TASK_TYPE!
-          if (v.task_type !== 'montaj') return false
-          
-          // FAQAT POST CONTENT_TYPE!
-          if (v.content_type !== 'post') return false
-          
-          // FAQAT COMPLETED EDITING_STATUS!
-          if (v.editing_status !== 'completed') return false
-          
-          // FAQAT KIRITISHDAN (record_id bor)!
-          if (!v.record_id) return false
-          
-          const videoDate = new Date(v.created_at)
-          return videoDate.getMonth() === currentMonth && videoDate.getFullYear() === currentYear
-        })
-        
-        const completed = thisMonthVideos?.length || 0
-        const target = project.monthly_target || 12
-        const progress = Math.round((completed / target) * 100)
+      if (!videos || videos.length === 0) {
+        setAvailableYears([new Date().getFullYear()])
+        return
+      }
 
-        const nearestDeadline = project.videos
-          ?.filter((v: any) => v.deadline && v.editing_status !== 'completed')
-          .sort((a: any, b: any) => 
-            new Date(a.deadline).getTime() - new Date(b.deadline).getTime()
-          )[0]
-
-        return {
-          ...project,
-          completed,
-          target,
-          progress,
-          nearestDeadline: nearestDeadline?.deadline
+      const years = new Set<number>()
+      videos.forEach(video => {
+        if (video.created_at) {
+          const year = new Date(video.created_at).getFullYear()
+          years.add(year)
         }
-      }).sort((a, b) => {
-        if (a.nearestDeadline && !b.nearestDeadline) return -1
-        if (!a.nearestDeadline && b.nearestDeadline) return 1
-        if (a.nearestDeadline && b.nearestDeadline) {
-          return new Date(a.nearestDeadline).getTime() - new Date(b.nearestDeadline).getTime()
-        }
-        return b.progress - a.progress
       })
 
-      setProjects(projectsWithProgress || [])
+      setAvailableYears(Array.from(years).sort((a, b) => b - a))
+    } catch (error) {
+      console.error('Error loading years:', error)
+      setAvailableYears([new Date().getFullYear()])
+    }
+  }
+
+  const fetchMobilographers = async () => {
+    try {
+      const { data } = await supabase
+        .from('mobilographers')
+        .select('*')
+        .order('name')
+
+      setMobilographers(data || [])
+    } catch (error) {
+      console.error('Error:', error)
+    }
+  }
+
+  const fetchProjects = async () => {
+    try {
+      setLoading(true)
+
+      // Calculate first and last day of selected month
+      const firstDay = new Date(selectedYear, selectedMonth - 1, 1)
+      const lastDay = new Date(selectedYear, selectedMonth, 0, 23, 59, 59, 999)
+
+      const { data: projectsData } = await supabase
+        .from('projects')
+        .select('*, mobilographers(name)')
+        .order('name')
+
+      const projectsWithProgress = await Promise.all(
+        (projectsData || []).map(async (project) => {
+          // Get completed videos for this month
+          const { data: videos } = await supabase
+            .from('videos')
+            .select('*')
+            .eq('project_id', project.id)
+            .gte('created_at', firstDay.toISOString())
+            .lte('created_at', lastDay.toISOString())
+
+          const completedPosts = videos?.filter(
+            v => v.record_id !== null && 
+                 v.editing_status === 'completed' && 
+                 v.content_type === 'post' && 
+                 v.task_type === 'montaj'
+          ).length || 0
+
+          const progress = project.monthly_target > 0 
+            ? Math.round((completedPosts / project.monthly_target) * 100)
+            : 0
+
+          return {
+            ...project,
+            completed: completedPosts,
+            progress
+          }
+        })
+      )
+
+      setProjects(projectsWithProgress)
       setLoading(false)
     } catch (error) {
       console.error('Error:', error)
@@ -80,52 +117,67 @@ export default function LoyihalarPage() {
     }
   }
 
-  const getDeadlineInfo = (deadline: string | null) => {
-    if (!deadline) return null
-    
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const deadlineDate = new Date(deadline)
-    deadlineDate.setHours(0, 0, 0, 0)
-    const diffDays = Math.ceil((deadlineDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-    
-    if (diffDays < 0) {
-      return { text: `${Math.abs(diffDays)} kun kechikdi`, color: 'text-red-600', bgColor: 'bg-red-50', borderColor: 'border-red-400' }
-    }
-    if (diffDays === 0) {
-      return { text: 'Bugun!', color: 'text-red-600', bgColor: 'bg-red-50', borderColor: 'border-red-400' }
-    }
-    if (diffDays <= 3) {
-      return { text: `${diffDays} kun qoldi`, color: 'text-orange-600', bgColor: 'bg-orange-50', borderColor: 'border-orange-400' }
-    }
-    if (diffDays <= 7) {
-      return { text: `${diffDays} kun qoldi`, color: 'text-yellow-600', bgColor: 'bg-yellow-50', borderColor: 'border-yellow-400' }
-    }
-    return { text: `${diffDays} kun qoldi`, color: 'text-green-600', bgColor: 'bg-green-50', borderColor: 'border-green-400' }
-  }
+  const handleCreateProject = async (e: React.FormEvent) => {
+    e.preventDefault()
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Bu loyihani o\'chirmoqchimisiz?')) return
+    if (!newProject.name || !newProject.mobilographer_id) {
+      alert('Loyiha nomi va mobilograf majburiy!')
+      return
+    }
 
     try {
-      const { error } = await supabase
+      await supabase
         .from('projects')
-        .delete()
-        .eq('id', id)
+        .insert([{
+          name: newProject.name,
+          mobilographer_id: newProject.mobilographer_id,
+          monthly_target: newProject.monthly_target
+        }])
 
-      if (error) throw error
-
-      alert('✅ Loyiha o\'chirildi!')
-      fetchData()
+      alert('✅ Loyiha qo\'shildi!')
+      setNewProject({
+        name: '',
+        mobilographer_id: '',
+        monthly_target: 6
+      })
+      setShowNewProjectForm(false)
+      fetchProjects()
     } catch (error) {
       console.error('Error:', error)
       alert('❌ Xatolik yuz berdi!')
     }
   }
 
-  const getCurrentMonthName = () => {
-    const now = new Date()
-    return now.toLocaleDateString('uz-UZ', { month: 'long', year: 'numeric' })
+  const handleDeleteProject = async (id: string, name: string) => {
+    if (!confirm(`"${name}" loyihasini o'chirmoqchimisiz?\n\nDIQQAT: Bu loyihaga tegishli barcha videolar ham o'chiriladi!`)) {
+      return
+    }
+
+    try {
+      await supabase
+        .from('videos')
+        .delete()
+        .eq('project_id', id)
+
+      await supabase
+        .from('projects')
+        .delete()
+        .eq('id', id)
+
+      alert('✅ Loyiha o\'chirildi!')
+      fetchProjects()
+    } catch (error) {
+      console.error('Error:', error)
+      alert('❌ Xatolik yuz berdi!')
+    }
+  }
+
+  const getMonthName = (monthNum: number) => {
+    const months = [
+      'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun',
+      'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'
+    ]
+    return months[monthNum - 1]
   }
 
   if (loading) {
@@ -146,98 +198,214 @@ export default function LoyihalarPage() {
           <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
             📁 Loyihalar
           </h1>
-          <p className="text-sm text-gray-500 mt-1">📅 {getCurrentMonthName()} - Oylik Progress (Faqat MONTAJ POST)</p>
+          <p className="text-sm text-gray-500 mt-1">
+            {getMonthName(selectedMonth)}, {selectedYear} - Oylik Progress (Faqat MONTAJ POST)
+          </p>
         </div>
-        <Link href="/loyihalar/yangi">
-          <button className="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white px-6 py-3 rounded-xl font-semibold flex items-center gap-2 transition transform hover:scale-105">
-            ➕ Yangi Loyiha
-          </button>
-        </Link>
+        <button
+          onClick={() => setShowNewProjectForm(!showNewProjectForm)}
+          className="bg-gradient-to-r from-purple-500 to-pink-600 text-white px-6 py-3 rounded-2xl font-bold hover:scale-105 transition-transform shadow-lg"
+        >
+          ➕ Yangi Loyiha
+        </button>
       </div>
 
-      {projects.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {projects.map((project) => {
-            const deadlineInfo = getDeadlineInfo(project.nearestDeadline)
-            
-            return (
-              <div
-                key={project.id}
-                className={`card-modern border-2 ${deadlineInfo?.borderColor || 'border-gray-200'} ${deadlineInfo?.bgColor || ''} hover:shadow-xl transition-all`}
+      {/* Year and Month Filter */}
+      <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-100 p-6">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-semibold mb-2 text-gray-700">
+              📅 Yil
+            </label>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+              className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all outline-none text-lg font-semibold"
+            >
+              {availableYears.map(year => (
+                <option key={year} value={year}>{year} yil</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold mb-2 text-gray-700">
+              📊 Oy
+            </label>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+              className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:ring-4 focus:ring-pink-100 transition-all outline-none text-lg font-semibold"
+            >
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(month => (
+                <option key={month} value={month}>{getMonthName(month)}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="mt-4 bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl p-4">
+          <div className="flex items-center gap-3">
+            <span className="text-3xl">📊</span>
+            <div>
+              <p className="text-sm text-gray-600 font-medium">Ko'rsatilgan davr:</p>
+              <p className="text-xl font-bold text-gray-800">
+                {getMonthName(selectedMonth)} {selectedYear}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* New Project Form */}
+      {showNewProjectForm && (
+        <div className="bg-white rounded-2xl shadow-lg border-2 border-purple-200 p-6">
+          <h2 className="text-xl font-bold mb-4">📝 Yangi Loyiha Qo'shish</h2>
+          <form onSubmit={handleCreateProject} className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold mb-2">Loyiha nomi</label>
+              <input
+                type="text"
+                value={newProject.name}
+                onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all outline-none"
+                placeholder="Masalan: Mars IT"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold mb-2">Mobilograf</label>
+              <select
+                value={newProject.mobilographer_id}
+                onChange={(e) => setNewProject({ ...newProject, mobilographer_id: e.target.value })}
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all outline-none"
+                required
               >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex-1">
-                    <h3 className="text-xl font-bold mb-1">{project.name}</h3>
-                    <p className="text-sm text-gray-600">👤 {project.mobilographers?.name}</p>
-                  </div>
-                  <button
-                    onClick={() => handleDelete(project.id)}
-                    className="text-red-500 hover:text-red-700 text-2xl transition"
-                  >
-                    🗑️
-                  </button>
+                <option value="">Tanlang...</option>
+                {mobilographers.map(m => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold mb-2">Oylik maqsad (post soni)</label>
+              <input
+                type="number"
+                min="1"
+                value={newProject.monthly_target}
+                onChange={(e) => setNewProject({ ...newProject, monthly_target: parseInt(e.target.value) })}
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all outline-none"
+                required
+              />
+            </div>
+
+            <div className="flex gap-4">
+              <button
+                type="submit"
+                className="flex-1 bg-gradient-to-r from-purple-500 to-pink-600 text-white py-3 rounded-xl font-bold hover:scale-105 transition-transform"
+              >
+                ✅ Saqlash
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowNewProjectForm(false)}
+                className="px-6 bg-gray-200 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-300 transition-colors"
+              >
+                Bekor qilish
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Projects Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {projects.map((project) => (
+          <div key={project.id} className="bg-white rounded-2xl shadow-lg border-2 border-gray-100 overflow-hidden hover:shadow-2xl transition-shadow">
+            <div className="bg-gradient-to-r from-purple-500 to-pink-600 p-4 text-white">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-xl">{project.name}</h3>
+                <button
+                  onClick={() => handleDeleteProject(project.id, project.name)}
+                  className="text-white hover:text-red-200 text-2xl transition-colors"
+                  title="Loyihani o'chirish"
+                >
+                  🗑️
+                </button>
+              </div>
+              <p className="text-sm opacity-90 mt-1">👤 {project.mobilographers?.name}</p>
+            </div>
+
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="text-sm text-gray-600">
+                  📄 {project.completed}/{project.monthly_target} post
                 </div>
-
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700">
-                      📄 {project.completed}/{project.target} post montaj (shu oy)
-                    </span>
-                    <span className={`text-2xl font-bold ${
-                      project.progress >= 100 ? 'text-green-600' :
-                      project.progress >= 75 ? 'text-yellow-600' :
-                      'text-blue-600'
-                    }`}>
-                      {project.progress}%
-                    </span>
-                  </div>
-
-                  <div className="w-full bg-gray-200 rounded-full h-3">
-                    <div
-                      className={`progress-bar h-3 rounded-full ${
-                        project.progress >= 100 ? 'bg-green-500' :
-                        project.progress >= 75 ? 'bg-yellow-500' :
-                        'bg-blue-500'
-                      }`}
-                      style={{ width: `${Math.min(project.progress, 100)}%` }}
-                    />
-                  </div>
-
-                  {deadlineInfo && (
-                    <div className={`text-sm font-semibold ${deadlineInfo.color}`}>
-                      ⏰ {deadlineInfo.text}
-                    </div>
-                  )}
-
-                  {project.progress >= 100 && (
-                    <div className="bg-green-100 text-green-700 px-3 py-2 rounded-lg text-center font-bold text-sm">
-                      ✅ Shu oylik maqsad bajarildi!
-                    </div>
-                  )}
-
-                  {project.progress < 100 && (
-                    <div className="bg-blue-50 text-blue-700 px-3 py-2 rounded-lg text-center text-sm">
-                      📊 Yana {project.target - project.completed} ta post montaj kerak
-                    </div>
-                  )}
-                </div>
-
-                <div className="text-xs text-gray-400 mt-3 pt-3 border-t">
-                  🎯 Oylik maqsad: {project.target} post montaj
+                <div className={`text-2xl font-bold ${
+                  project.progress >= 100 ? 'text-green-600' :
+                  project.progress >= 70 ? 'text-blue-600' :
+                  project.progress >= 40 ? 'text-yellow-600' :
+                  'text-red-600'
+                }`}>
+                  {project.progress}%
                 </div>
               </div>
-            )
-          })}
-        </div>
-      ) : (
-        <div className="text-center py-12 bg-gray-50 rounded-xl">
-          <div className="text-6xl mb-4">📁</div>
-          <p className="text-gray-500 text-lg mb-4">Hozircha loyihalar yo'q</p>
-          <Link href="/loyihalar/yangi">
-            <button className="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white px-6 py-3 rounded-xl font-semibold">
-              ➕ Birinchi Loyiha Yaratish
-            </button>
-          </Link>
+
+              <div className="relative">
+                <div className="h-4 bg-gray-200 rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      project.progress >= 100 ? 'bg-gradient-to-r from-green-500 to-emerald-600' :
+                      project.progress >= 70 ? 'bg-gradient-to-r from-blue-500 to-blue-600' :
+                      project.progress >= 40 ? 'bg-gradient-to-r from-yellow-500 to-orange-500' :
+                      'bg-gradient-to-r from-red-500 to-pink-600'
+                    }`}
+                    style={{ width: `${Math.min(project.progress, 100)}%` }}
+                  ></div>
+                </div>
+              </div>
+
+              <div className="mt-4 text-center">
+                {project.progress >= 100 ? (
+                  <span className="bg-green-100 text-green-700 px-4 py-2 rounded-lg text-sm font-bold">
+                    ✅ Bajarildi
+                  </span>
+                ) : project.progress >= 70 ? (
+                  <span className="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg text-sm font-bold">
+                    🎯 Yaxshi ketmoqda
+                  </span>
+                ) : project.progress >= 40 ? (
+                  <span className="bg-yellow-100 text-yellow-700 px-4 py-2 rounded-lg text-sm font-bold">
+                    ⚠️ Orqada qolmoqda
+                  </span>
+                ) : (
+                  <span className="bg-red-100 text-red-700 px-4 py-2 rounded-lg text-sm font-bold">
+                    🚨 Jiddiy orqada
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <p className="text-xs text-gray-500 text-center">
+                  📊 Yangi post montaj qilganingizda yangilanadi
+                </p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {projects.length === 0 && (
+        <div className="text-center py-16 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300">
+          <div className="text-7xl mb-4">📁</div>
+          <p className="text-gray-500 text-xl font-medium mb-2">
+            {getMonthName(selectedMonth)} {selectedYear} uchun loyihalar yo'q
+          </p>
+          <p className="text-gray-400 text-sm mb-4">
+            Yangi loyiha qo'shish uchun yuqoridagi tugmani bosing
+          </p>
         </div>
       )}
     </div>
