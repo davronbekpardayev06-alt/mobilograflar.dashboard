@@ -1,17 +1,17 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import Link from 'next/link'
 
 export default function MobilograflarPage() {
   const [mobilographers, setMobilographers] = useState<any[]>([])
+  const [projects, setProjects] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [showAddModal, setShowAddModal] = useState(false)
+  const [showNewForm, setShowNewForm] = useState(false)
+  const [editingMobilographer, setEditingMobilographer] = useState<any>(null)
   const [newMobilographer, setNewMobilographer] = useState({
     name: '',
-    phone: '',
-    email: ''
+    monthly_target: 24
   })
 
   useEffect(() => {
@@ -25,65 +25,55 @@ export default function MobilograflarPage() {
         .select('*')
         .order('name')
 
-      const { data: projects } = await supabase
+      const { data: projectsData } = await supabase
         .from('projects')
-        .select(`
-          *,
-          videos(id, editing_status, filming_status, content_type, task_type, created_at, record_id)
-        `)
+        .select('*')
+        .order('name')
 
-      const mobilographersWithStats = mobilographersData?.map(mob => {
-        const mobProjects = projects?.filter(p => p.mobilographer_id === mob.id) || []
-        
-        const now = new Date()
-        const currentMonth = now.getMonth()
-        const currentYear = now.getFullYear()
+      const currentMonth = new Date()
+      const firstDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1)
+      const lastDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59, 999)
 
-        const projectsWithProgress = mobProjects.map(project => {
-          // FAQAT SHU OYNING MONTAJ POST'LARINI HISOBLASH - FAQAT KIRITISHDAN!
-          const thisMonthVideos = project.videos?.filter((v: any) => {
-            // FAQAT MONTAJ TASK_TYPE!
-            if (v.task_type !== 'montaj') return false
-            
-            // FAQAT POST CONTENT_TYPE!
-            if (v.content_type !== 'post') return false
-            
-            // FAQAT COMPLETED EDITING_STATUS!
-            if (v.editing_status !== 'completed') return false
-            
-            // FAQAT KIRITISHDAN (record_id bor)!
-            if (!v.record_id) return false
-            
-            const videoDate = new Date(v.created_at)
-            return videoDate.getMonth() === currentMonth && videoDate.getFullYear() === currentYear
-          })
-          
-          const completed = thisMonthVideos?.length || 0
-          const target = project.monthly_target || 12
-          const progress = Math.round((completed / target) * 100)
+      const mobilographersWithStats = await Promise.all(
+        (mobilographersData || []).map(async (mob) => {
+          const mobProjects = projectsData?.filter(p => p.mobilographer_id === mob.id) || []
+
+          let totalCompleted = 0
+          let totalTarget = 0
+
+          for (const project of mobProjects) {
+            const { data: videos } = await supabase
+              .from('videos')
+              .select('*')
+              .eq('project_id', project.id)
+              .gte('created_at', firstDay.toISOString())
+              .lte('created_at', lastDay.toISOString())
+
+            const completed = videos?.filter(
+              v => v.record_id !== null && 
+                   v.editing_status === 'completed' && 
+                   v.content_type === 'post' && 
+                   v.task_type === 'montaj'
+            ).length || 0
+
+            totalCompleted += completed
+            totalTarget += project.monthly_target || 0
+          }
+
+          const progress = totalTarget > 0 ? Math.round((totalCompleted / totalTarget) * 100) : 0
 
           return {
-            ...project,
-            completed,
-            target,
+            ...mob,
+            projects: mobProjects,
+            totalCompleted,
+            totalTarget,
             progress
           }
         })
+      )
 
-        const totalCompleted = projectsWithProgress.reduce((sum, p) => sum + p.completed, 0)
-        const totalTarget = projectsWithProgress.reduce((sum, p) => sum + p.target, 0)
-        const overallProgress = totalTarget > 0 ? Math.round((totalCompleted / totalTarget) * 100) : 0
-
-        return {
-          ...mob,
-          projects: projectsWithProgress,
-          totalCompleted,
-          totalTarget,
-          overallProgress
-        }
-      })
-
-      setMobilographers(mobilographersWithStats || [])
+      setMobilographers(mobilographersWithStats)
+      setProjects(projectsData || [])
       setLoading(false)
     } catch (error) {
       console.error('Error:', error)
@@ -91,28 +81,51 @@ export default function MobilograflarPage() {
     }
   }
 
-  const handleAddMobilographer = async (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!newMobilographer.name.trim()) {
-      alert('Ism kiritish majburiy!')
+    if (!newMobilographer.name) {
+      alert('Ism majburiy!')
       return
     }
 
     try {
-      const { error } = await supabase
+      await supabase
         .from('mobilographers')
         .insert([{
-          name: newMobilographer.name.trim(),
-          phone: newMobilographer.phone.trim() || null,
-          email: newMobilographer.email.trim() || null
+          name: newMobilographer.name,
+          monthly_target: newMobilographer.monthly_target
         }])
 
-      if (error) throw error
-
       alert('✅ Mobilograf qo\'shildi!')
-      setShowAddModal(false)
-      setNewMobilographer({ name: '', phone: '', email: '' })
+      setNewMobilographer({ name: '', monthly_target: 24 })
+      setShowNewForm(false)
+      fetchData()
+    } catch (error) {
+      console.error('Error:', error)
+      alert('❌ Xatolik yuz berdi!')
+    }
+  }
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!editingMobilographer.name) {
+      alert('Ism majburiy!')
+      return
+    }
+
+    try {
+      await supabase
+        .from('mobilographers')
+        .update({
+          name: editingMobilographer.name,
+          monthly_target: editingMobilographer.monthly_target
+        })
+        .eq('id', editingMobilographer.id)
+
+      alert('✅ Yangilandi!')
+      setEditingMobilographer(null)
       fetchData()
     } catch (error) {
       console.error('Error:', error)
@@ -121,17 +134,90 @@ export default function MobilograflarPage() {
   }
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`${name}ni o'chirmoqchimisiz?`)) return
+    if (!confirm(`"${name}" mobilografni o'chirmoqchimisiz?\n\nDIQQAT: Uning barcha loyihalari va yozuvlari ham o'chiriladi!`)) {
+      return
+    }
 
     try {
-      const { error } = await supabase
+      // Get all projects
+      const { data: projectsToDelete } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('mobilographer_id', id)
+
+      if (projectsToDelete && projectsToDelete.length > 0) {
+        const projectIds = projectsToDelete.map(p => p.id)
+
+        // Delete videos
+        await supabase
+          .from('videos')
+          .delete()
+          .in('project_id', projectIds)
+
+        // Delete projects
+        await supabase
+          .from('projects')
+          .delete()
+          .in('id', projectIds)
+      }
+
+      // Delete records
+      await supabase
+        .from('records')
+        .delete()
+        .eq('mobilographer_id', id)
+
+      // Delete mobilographer
+      await supabase
         .from('mobilographers')
         .delete()
         .eq('id', id)
 
-      if (error) throw error
+      alert('✅ O\'chirildi!')
+      fetchData()
+    } catch (error) {
+      console.error('Error:', error)
+      alert('❌ Xatolik yuz berdi!')
+    }
+  }
 
-      alert('✅ Mobilograf o\'chirildi!')
+  const handleReassignProject = async (projectId: string, projectName: string, currentMobId: string) => {
+    const otherMobilographers = mobilographers.filter(m => m.id !== currentMobId)
+    
+    if (otherMobilographers.length === 0) {
+      alert('Boshqa mobilograf yo\'q!')
+      return
+    }
+
+    const mobilographersList = otherMobilographers
+      .map((m, idx) => `${idx + 1}. ${m.name}`)
+      .join('\n')
+
+    const choice = prompt(
+      `"${projectName}" loyihasini qaysi mobilografga o'tkazmoqchisiz?\n\n${mobilographersList}\n\nRaqam kiriting:`
+    )
+
+    if (!choice) return
+
+    const index = parseInt(choice) - 1
+    if (index < 0 || index >= otherMobilographers.length) {
+      alert('Noto\'g\'ri raqam!')
+      return
+    }
+
+    const newMobilographer = otherMobilographers[index]
+
+    if (!confirm(`"${projectName}" loyihasini ${newMobilographer.name}ga o'tkazmoqchimisiz?`)) {
+      return
+    }
+
+    try {
+      await supabase
+        .from('projects')
+        .update({ mobilographer_id: newMobilographer.id })
+        .eq('id', projectId)
+
+      alert(`✅ "${projectName}" loyihasi ${newMobilographer.name}ga o'tkazildi!`)
       fetchData()
     } catch (error) {
       console.error('Error:', error)
@@ -143,7 +229,7 @@ export default function MobilograflarPage() {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <div className="inline-block w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+          <div className="inline-block w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mb-4"></div>
           <p className="text-xl text-gray-600">Yuklanmoqda...</p>
         </div>
       </div>
@@ -154,195 +240,206 @@ export default function MobilograflarPage() {
     <div className="space-y-6 animate-slide-in">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
             👥 Mobilograflar
           </h1>
-          <p className="text-sm text-gray-500 mt-1">Faqat MONTAJ POST hisoblanadi</p>
+          <p className="text-sm text-gray-500 mt-1">
+            Faqat MONTAJ POST hisoblanadi
+          </p>
         </div>
         <button
-          onClick={() => setShowAddModal(true)}
-          className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-6 py-3 rounded-xl font-semibold flex items-center gap-2 transition transform hover:scale-105"
+          onClick={() => setShowNewForm(!showNewForm)}
+          className="bg-gradient-to-r from-purple-500 to-pink-600 text-white px-6 py-3 rounded-2xl font-bold hover:scale-105 transition-transform shadow-lg"
         >
           ➕ Yangi Mobilograf
         </button>
       </div>
 
-      {mobilographers.length > 0 ? (
-        <div className="space-y-6">
-          {mobilographers.map((mob) => (
-            <div key={mob.id} className="card-modern">
-              <div className="flex items-start justify-between mb-6">
+      {/* New Mobilographer Form */}
+      {showNewForm && (
+        <div className="bg-white rounded-2xl shadow-lg border-2 border-purple-200 p-6">
+          <h2 className="text-xl font-bold mb-4">📝 Yangi Mobilograf Qo'shish</h2>
+          <form onSubmit={handleCreate} className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold mb-2">Ism</label>
+              <input
+                type="text"
+                value={newMobilographer.name}
+                onChange={(e) => setNewMobilographer({ ...newMobilographer, name: e.target.value })}
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all outline-none"
+                placeholder="Masalan: Og'abek"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold mb-2">Oylik maqsad (jami postlar)</label>
+              <input
+                type="number"
+                min="1"
+                value={newMobilographer.monthly_target}
+                onChange={(e) => setNewMobilographer({ ...newMobilographer, monthly_target: parseInt(e.target.value) })}
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all outline-none"
+                required
+              />
+            </div>
+
+            <div className="flex gap-4">
+              <button
+                type="submit"
+                className="flex-1 bg-gradient-to-r from-purple-500 to-pink-600 text-white py-3 rounded-xl font-bold hover:scale-105 transition-transform"
+              >
+                ✅ Saqlash
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowNewForm(false)}
+                className="px-6 bg-gray-200 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-300 transition-colors"
+              >
+                Bekor qilish
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Edit Mobilographer Form */}
+      {editingMobilographer && (
+        <div className="bg-white rounded-2xl shadow-lg border-2 border-blue-200 p-6">
+          <h2 className="text-xl font-bold mb-4">✏️ Tahrirlash: {editingMobilographer.name}</h2>
+          <form onSubmit={handleUpdate} className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold mb-2">Ism</label>
+              <input
+                type="text"
+                value={editingMobilographer.name}
+                onChange={(e) => setEditingMobilographer({ ...editingMobilographer, name: e.target.value })}
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold mb-2">Oylik maqsad (jami postlar)</label>
+              <input
+                type="number"
+                min="1"
+                value={editingMobilographer.monthly_target}
+                onChange={(e) => setEditingMobilographer({ ...editingMobilographer, monthly_target: parseInt(e.target.value) })}
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none"
+                required
+              />
+            </div>
+
+            <div className="flex gap-4">
+              <button
+                type="submit"
+                className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white py-3 rounded-xl font-bold hover:scale-105 transition-transform"
+              >
+                ✅ Saqlash
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditingMobilographer(null)}
+                className="px-6 bg-gray-200 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-300 transition-colors"
+              >
+                Bekor qilish
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Mobilographers List */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {mobilographers.map((mob) => (
+          <div key={mob.id} className="bg-white rounded-2xl shadow-lg border-2 border-gray-100 overflow-hidden">
+            <div className="bg-gradient-to-r from-purple-500 to-pink-600 p-6 text-white">
+              <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-2xl font-bold">
+                  <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center text-3xl font-bold text-purple-600">
                     {mob.name.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <h2 className="text-2xl font-bold">{mob.name}</h2>
-                    <p className="text-gray-600">{mob.projects.length} ta loyiha</p>
-                    {mob.phone && (
-                      <p className="text-sm text-gray-500">📱 {mob.phone}</p>
-                    )}
-                    {mob.email && (
-                      <p className="text-sm text-gray-500">📧 {mob.email}</p>
-                    )}
+                    <h3 className="text-2xl font-bold">{mob.name}</h3>
+                    <p className="text-sm opacity-90">{mob.projects.length} ta loyiha</p>
                   </div>
                 </div>
-                <button
-                  onClick={() => handleDelete(mob.id, mob.name)}
-                  className="text-red-500 hover:text-red-700 text-2xl transition"
-                  title="O'chirish"
-                >
-                  🗑️
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setEditingMobilographer(mob)}
+                    className="text-white hover:text-yellow-200 text-2xl transition-colors"
+                    title="Tahrirlash"
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    onClick={() => handleDelete(mob.id, mob.name)}
+                    className="text-white hover:text-red-200 text-2xl transition-colors"
+                    title="O'chirish"
+                  >
+                    🗑️
+                  </button>
+                </div>
               </div>
 
-              {/* Umumiy Progress */}
-              <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="font-bold text-gray-700">
-                    📊 Umumiy Progress (Faqat MONTAJ POST)
-                  </span>
-                  <span className="text-3xl font-bold text-blue-600">
-                    {mob.overallProgress}%
-                  </span>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm opacity-90">📊 Umumiy Progress (Faqat MONTAJ POST)</p>
+                  <p className="text-sm opacity-75 mt-1">
+                    {mob.totalCompleted}/{mob.totalTarget} post montaj
+                  </p>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-4 mb-2">
-                  <div
-                    className={`progress-bar h-4 rounded-full ${
-                      mob.overallProgress >= 100 ? 'bg-green-500' :
-                      mob.overallProgress >= 75 ? 'bg-yellow-500' :
-                      'bg-blue-500'
-                    }`}
-                    style={{ width: `${Math.min(mob.overallProgress, 100)}%` }}
-                  />
+                <div className="text-4xl font-bold">
+                  {mob.progress}%
                 </div>
-                <p className="text-sm text-gray-600">
-                  📄 {mob.totalCompleted}/{mob.totalTarget} post montaj (shu oy)
-                </p>
               </div>
+            </div>
 
-              {/* Loyihalar ro'yxati */}
+            <div className="p-6">
+              <h4 className="font-bold text-lg mb-4 flex items-center gap-2">
+                📁 Loyihalar:
+                {mob.projects.length === 0 && (
+                  <span className="text-sm text-gray-500 font-normal">(Yo'q)</span>
+                )}
+              </h4>
+
               {mob.projects.length > 0 ? (
                 <div className="space-y-3">
-                  <h3 className="font-bold text-lg mb-3">📁 Loyihalar:</h3>
                   {mob.projects.map((project: any) => (
-                    <div
-                      key={project.id}
-                      className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition"
-                    >
-                      <div className="flex-1">
-                        <h4 className="font-bold text-lg">{project.name}</h4>
-                        <p className="text-sm text-gray-600">
-                          📄 {project.completed}/{project.target} post montaj (shu oy)
-                        </p>
+                    <div key={project.id} className="border-2 border-gray-200 rounded-xl p-4 hover:border-purple-300 transition-all">
+                      <div className="flex items-center justify-between mb-2">
+                        <h5 className="font-bold text-gray-800">{project.name}</h5>
+                        <button
+                          onClick={() => handleReassignProject(project.id, project.name, mob.id)}
+                          className="text-blue-500 hover:text-blue-700 text-sm font-semibold transition-colors"
+                          title="Boshqa mobilografga o'tkazish"
+                        >
+                          🔄 O'tkazish
+                        </button>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <div className="w-32 bg-gray-200 rounded-full h-3">
-                          <div
-                            className={`progress-bar h-3 rounded-full ${
-                              project.progress >= 100 ? 'bg-green-500' :
-                              project.progress >= 75 ? 'bg-yellow-500' :
-                              'bg-blue-500'
-                            }`}
-                            style={{ width: `${Math.min(project.progress, 100)}%` }}
-                          />
-                        </div>
-                        <span className={`text-xl font-bold min-w-[60px] text-right ${
-                          project.progress >= 100 ? 'text-green-600' :
-                          project.progress >= 75 ? 'text-yellow-600' :
-                          'text-blue-600'
-                        }`}>
-                          {project.progress}%
-                        </span>
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <span>🎯 Oylik maqsad: {project.monthly_target} post</span>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-8 bg-gray-50 rounded-xl">
-                  <div className="text-4xl mb-3">📁</div>
-                  <p className="text-gray-500">Hozircha loyihalar yo'q</p>
+                <div className="text-center py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
+                  <p className="text-gray-400">Hali loyihalar yo'q</p>
+                  <p className="text-xs text-gray-400 mt-1">Loyihalar sahifasidan qo'shing</p>
                 </div>
               )}
             </div>
-          ))}
-        </div>
-      ) : (
-        <div className="text-center py-12 bg-gray-50 rounded-xl">
-          <div className="text-6xl mb-4">👥</div>
-          <p className="text-gray-500 text-lg mb-4">Hozircha mobilograflar yo'q</p>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-6 py-3 rounded-xl font-semibold"
-          >
-            ➕ Birinchi Mobilograf Qo'shish
-          </button>
-        </div>
-      )}
-
-      {/* ADD MODAL */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold">➕ Yangi Mobilograf</h2>
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="text-gray-500 hover:text-gray-700 text-3xl"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleAddMobilographer} className="space-y-6">
-              <div>
-                <label className="block text-sm font-semibold mb-2 text-gray-700">
-                  👤 Ism (Familiya) *
-                </label>
-                <input
-                  type="text"
-                  value={newMobilographer.name}
-                  onChange={(e) => setNewMobilographer({ ...newMobilographer, name: e.target.value })}
-                  placeholder="Masalan: Abdulaziz"
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none text-lg"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold mb-2 text-gray-700">
-                  📱 Telefon (ixtiyoriy)
-                </label>
-                <input
-                  type="tel"
-                  value={newMobilographer.phone}
-                  onChange={(e) => setNewMobilographer({ ...newMobilographer, phone: e.target.value })}
-                  placeholder="+998 90 123 45 67"
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none text-lg"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold mb-2 text-gray-700">
-                  📧 Email (ixtiyoriy)
-                </label>
-                <input
-                  type="email"
-                  value={newMobilographer.email}
-                  onChange={(e) => setNewMobilographer({ ...newMobilographer, email: e.target.value })}
-                  placeholder="example@gmail.com"
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none text-lg"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white py-4 rounded-2xl font-bold text-xl transition-all duration-200 transform hover:scale-105 shadow-2xl"
-              >
-                ✅ Qo'shish
-              </button>
-            </form>
           </div>
+        ))}
+      </div>
+
+      {mobilographers.length === 0 && (
+        <div className="text-center py-16 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300">
+          <div className="text-7xl mb-4">👥</div>
+          <p className="text-gray-500 text-xl font-medium mb-2">Hali mobilograflar yo'q</p>
+          <p className="text-gray-400 text-sm mb-4">Yangi mobilograf qo'shish uchun yuqoridagi tugmani bosing</p>
         </div>
       )}
     </div>
