@@ -130,14 +130,48 @@ export default function MobilograflarPage() {
   const [showNewForm, setShowNewForm] = useState(false)
   const [editingMobilographer, setEditingMobilographer] = useState<any>(null)
   const [expandedMobilographer, setExpandedMobilographer] = useState<string | null>(null)
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear())
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1)
+  const [availableYears, setAvailableYears] = useState<number[]>([])
   const [newMobilographer, setNewMobilographer] = useState({
     name: '',
     monthly_target: 24
   })
 
   useEffect(() => {
-    fetchData()
+    loadAvailableYears()
   }, [])
+
+  useEffect(() => {
+    fetchData()
+  }, [selectedYear, selectedMonth])
+
+  const loadAvailableYears = async () => {
+    try {
+      const { data: videos } = await supabase
+        .from('videos')
+        .select('created_at')
+        .order('created_at', { ascending: false })
+
+      if (!videos || videos.length === 0) {
+        setAvailableYears([new Date().getFullYear()])
+        return
+      }
+
+      const years = new Set<number>()
+      videos.forEach(video => {
+        if (video.created_at) {
+          const year = new Date(video.created_at).getFullYear()
+          years.add(year)
+        }
+      })
+
+      setAvailableYears(Array.from(years).sort((a, b) => b - a))
+    } catch (error) {
+      console.error('Error loading years:', error)
+      setAvailableYears([new Date().getFullYear()])
+    }
+  }
 
   const fetchData = async () => {
     try {
@@ -151,9 +185,8 @@ export default function MobilograflarPage() {
         .select('*')
         .order('name')
 
-      const currentMonth = new Date()
-      const firstDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1)
-      const lastDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59, 999)
+      const firstDay = new Date(selectedYear, selectedMonth - 1, 1)
+      const lastDay = new Date(selectedYear, selectedMonth, 0, 23, 59, 59, 999)
 
       const mobilographersWithStats = await Promise.all(
         (mobilographersData || []).map(async (mob) => {
@@ -354,6 +387,14 @@ export default function MobilograflarPage() {
     }
   }
 
+  const getMonthName = (monthNum: number) => {
+    const months = [
+      'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun',
+      'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'
+    ]
+    return months[monthNum - 1]
+  }
+
   const getStatusBadge = (progress: number) => {
     if (progress >= 100) {
       return { emoji: '🎉', label: 'Bajarildi', color: 'from-green-400 to-emerald-500', bg: 'bg-gradient-to-br from-green-50 to-emerald-50', border: 'border-green-300', text: 'text-green-700' }
@@ -385,7 +426,7 @@ export default function MobilograflarPage() {
           <div>
             <h1 className="text-3xl font-bold text-white mb-2">👥 Mobilograflar</h1>
             <p className="text-purple-100">
-              Faqat MONTAJ POST hisoblanadi
+              {getMonthName(selectedMonth)} {selectedYear} • Faqat MONTAJ POST hisoblanadi
             </p>
           </div>
           <button
@@ -394,6 +435,43 @@ export default function MobilograflarPage() {
           >
             ➕ Yangi Mobilograf
           </button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-lg">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+              <span className="text-xl">📅</span>
+              Yil
+            </label>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+              className="w-full px-4 py-3 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200 text-gray-900 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 transition-all outline-none font-semibold"
+            >
+              {availableYears.map(year => (
+                <option key={year} value={year}>{year} yil</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+              <span className="text-xl">📊</span>
+              Oy
+            </label>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+              className="w-full px-4 py-3 rounded-xl bg-gradient-to-br from-blue-50 to-cyan-50 border border-blue-200 text-gray-900 focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all outline-none font-semibold"
+            >
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(month => (
+                <option key={month} value={month}>{getMonthName(month)}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
