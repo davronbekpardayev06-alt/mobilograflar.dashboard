@@ -35,7 +35,9 @@ export default function KiritishPage() {
     time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
     start_time: '',
     end_time: '',
-    notes: ''
+    notes: '',
+    work_year: new Date().getFullYear(),
+    work_month: new Date().getMonth() + 1
   })
 
   useEffect(() => {
@@ -79,6 +81,7 @@ export default function KiritishPage() {
       const { data: mobilographersData } = await supabase
         .from('mobilographers')
         .select('*')
+        .eq('is_active', true)
         .order('name')
 
       const { data: projectsData } = await supabase
@@ -281,7 +284,6 @@ export default function KiritishPage() {
       return
     }
 
-    // Montaj uchun vaqt tekshirish
     if (newRecord.type === 'editing' && (!newRecord.start_time || !newRecord.end_time)) {
       alert('Montaj uchun boshlangan va tugagan vaqtni kiriting!')
       return
@@ -290,7 +292,6 @@ export default function KiritishPage() {
     setSubmitting(true)
 
     try {
-      // Vaqt farqini hisoblash
       let durationMinutes = null
       if (newRecord.start_time && newRecord.end_time) {
         const duration = calculateDuration(newRecord.start_time, newRecord.end_time)
@@ -319,6 +320,9 @@ export default function KiritishPage() {
 
       const recordId = createdRecord.id
 
+      // Create work_date from selected work_year and work_month
+      const workDate = new Date(newRecord.work_year, newRecord.work_month - 1, 15)
+
       if (newRecord.type === 'editing') {
         const { data: pendingVideos } = await supabase
           .from('videos')
@@ -335,7 +339,8 @@ export default function KiritishPage() {
             .update({ 
               editing_status: 'completed',
               content_type: newRecord.content_type,
-              record_id: recordId
+              record_id: recordId,
+              work_date: workDate.toISOString()
             })
             .in('id', videoIds)
         } else {
@@ -347,7 +352,9 @@ export default function KiritishPage() {
               filming_status: 'completed',
               editing_status: 'completed',
               content_type: newRecord.content_type,
-              record_id: recordId
+              task_type: 'montaj',
+              record_id: recordId,
+              work_date: workDate.toISOString()
             })
           }
           await supabase.from('videos').insert(videosToInsert)
@@ -363,14 +370,16 @@ export default function KiritishPage() {
             filming_status: 'completed',
             editing_status: 'pending',
             content_type: 'post',
-            record_id: recordId
+            task_type: 'syomka',
+            record_id: recordId,
+            work_date: workDate.toISOString()
           })
         }
         await supabase.from('videos').insert(videosToInsert)
       }
 
       const durationText = durationMinutes ? ` (${formatDuration(durationMinutes)})` : ''
-      alert(`✅ ${newRecord.count} ta ${newRecord.type === 'editing' ? newRecord.content_type === 'post' ? 'post' : 'storis' : 'syomka'} muvaffaqiyatli qo'shildi!${durationText}`)
+      alert(`✅ ${newRecord.count} ta ${newRecord.type === 'editing' ? newRecord.content_type === 'post' ? 'post' : 'storis' : 'syomka'} muvaffaqiyatli qo'shildi!${durationText}\n\n📅 ${getMonthName(newRecord.work_month)} ${newRecord.work_year} uchun saqland i!`)
       
       setNewRecord({
         mobilographer_id: '',
@@ -382,7 +391,9 @@ export default function KiritishPage() {
         time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
         start_time: '',
         end_time: '',
-        notes: ''
+        notes: '',
+        work_year: new Date().getFullYear(),
+        work_month: new Date().getMonth() + 1
       })
       
       fetchRecordsByFilter()
@@ -448,6 +459,49 @@ export default function KiritishPage() {
                   onChange={(e) => setNewRecord({ ...newRecord, time: e.target.value })}
                   className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all outline-none text-lg"
                 />
+              </div>
+            </div>
+
+            {/* YANGI: Qaysi oy uchun */}
+            <div className="bg-gradient-to-br from-blue-50 to-purple-50 border-2 border-blue-300 rounded-2xl p-6">
+              <label className="block text-lg font-bold mb-4 text-gray-800 flex items-center gap-2">
+                📅 Qaysi oy uchun?
+              </label>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold mb-2 text-gray-700">
+                    Yil
+                  </label>
+                  <select
+                    value={newRecord.work_year}
+                    onChange={(e) => setNewRecord({ ...newRecord, work_year: parseInt(e.target.value) })}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-purple-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all outline-none font-semibold text-lg"
+                  >
+                    <option value={2024}>2024 yil</option>
+                    <option value={2025}>2025 yil</option>
+                    <option value={2026}>2026 yil</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold mb-2 text-gray-700">
+                    Oy
+                  </label>
+                  <select
+                    value={newRecord.work_month}
+                    onChange={(e) => setNewRecord({ ...newRecord, work_month: parseInt(e.target.value) })}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-blue-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none font-semibold text-lg"
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(month => (
+                      <option key={month} value={month}>{getMonthName(month)}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="mt-4 bg-white rounded-xl p-4 border-2 border-blue-200">
+                <p className="text-center text-lg font-bold text-gray-800">
+                  📊 Tanlandi: <span className="text-blue-600">{getMonthName(newRecord.work_month)} {newRecord.work_year}</span>
+                </p>
               </div>
             </div>
 
@@ -657,7 +711,7 @@ export default function KiritishPage() {
                 </span>
               ) : (
                 <span className="flex items-center justify-center gap-2">
-                  ✅ {newRecord.count} ta Saqlash
+                  ✅ {newRecord.count} ta Saqlash ({getMonthName(newRecord.work_month)} {newRecord.work_year})
                 </span>
               )}
             </button>
@@ -665,7 +719,7 @@ export default function KiritishPage() {
         </div>
       </div>
 
-      {/* Kiritilgan Ishlar ro'yxati - eskisi saqlanadi */}
+      {/* Kiritilgan Ishlar ro'yxati */}
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-bold">📋 Kiritilgan Ishlar</h2>
