@@ -49,33 +49,33 @@ function ProjectCard({ project, mobId, onReassign }: any) {
 
   if (loading || !stats) {
     return (
-      <div className="bg-gray-800/50 backdrop-blur-xl rounded-2xl p-4 border border-gray-700/50">
+      <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm">
         <div className="animate-pulse space-y-3">
-          <div className="h-4 bg-gray-700/50 rounded w-3/4"></div>
-          <div className="h-3 bg-gray-700/50 rounded w-1/2"></div>
+          <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+          <div className="h-3 bg-gray-200 rounded w-1/2"></div>
         </div>
       </div>
     )
   }
 
   const getProgressColor = (progress: number) => {
-    if (progress >= 100) return 'from-green-500 to-emerald-400'
-    if (progress >= 70) return 'from-blue-500 to-cyan-400'
-    if (progress >= 40) return 'from-yellow-500 to-orange-400'
-    return 'from-red-500 to-pink-400'
+    if (progress >= 100) return 'from-green-400 to-emerald-500'
+    if (progress >= 70) return 'from-blue-400 to-cyan-500'
+    if (progress >= 40) return 'from-yellow-400 to-orange-500'
+    return 'from-red-400 to-pink-500'
   }
 
   return (
-    <div className="bg-gray-800/50 backdrop-blur-xl rounded-2xl p-4 border border-gray-700/50 hover:border-gray-600/50 transition-all duration-300 hover:shadow-xl hover:shadow-purple-500/10">
+    <div className="bg-white rounded-2xl p-4 border border-gray-200 hover:border-purple-300 hover:shadow-lg transition-all duration-300">
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1">
-          <h4 className="font-semibold text-white text-base mb-1">{project.name}</h4>
-          <p className="text-xs text-gray-400">🎯 Maqsad: {project.monthly_target} post</p>
+          <h4 className="font-semibold text-gray-900 text-base mb-1">{project.name}</h4>
+          <p className="text-xs text-gray-500">🎯 Maqsad: {project.monthly_target} post</p>
         </div>
         <button
           onClick={() => onReassign(project.id, project.name, mobId)}
-          className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 px-3 py-1.5 rounded-xl text-xs font-medium transition-all duration-200 backdrop-blur-sm border border-blue-500/20"
+          className="bg-blue-50 hover:bg-blue-100 text-blue-600 px-3 py-1.5 rounded-xl text-xs font-medium transition-all duration-200 border border-blue-200"
           title="Boshqa mobilografga o'tkazish"
         >
           🔄 O'tkazish
@@ -85,36 +85,36 @@ function ProjectCard({ project, mobId, onReassign }: any) {
       {/* Stats Grid */}
       <div className="grid grid-cols-3 gap-3 mb-4">
         {/* Syomka */}
-        <div className="bg-blue-500/10 backdrop-blur-sm rounded-xl p-3 border border-blue-500/20">
+        <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-3 border border-blue-200">
           <div className="text-2xl mb-1">📹</div>
-          <div className="text-lg font-bold text-white">{stats.syomka}<span className="text-sm text-gray-400">/{project.monthly_target}</span></div>
-          <div className="text-xs text-gray-400">Syomka</div>
+          <div className="text-lg font-bold text-gray-900">{stats.syomka}<span className="text-sm text-gray-500">/{project.monthly_target}</span></div>
+          <div className="text-xs text-gray-600">Syomka</div>
         </div>
 
         {/* Montaj */}
-        <div className="bg-purple-500/10 backdrop-blur-sm rounded-xl p-3 border border-purple-500/20">
+        <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-3 border border-purple-200">
           <div className="text-2xl mb-1">🎬</div>
-          <div className="text-lg font-bold text-white">{stats.montaj}<span className="text-sm text-gray-400">/{project.monthly_target}</span></div>
-          <div className="text-xs text-gray-400">Montaj</div>
+          <div className="text-lg font-bold text-gray-900">{stats.montaj}<span className="text-sm text-gray-500">/{project.monthly_target}</span></div>
+          <div className="text-xs text-gray-600">Montaj</div>
         </div>
 
         {/* Pending */}
-        <div className="bg-yellow-500/10 backdrop-blur-sm rounded-xl p-3 border border-yellow-500/20">
+        <div className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-xl p-3 border border-yellow-200">
           <div className="text-2xl mb-1">⏳</div>
-          <div className="text-lg font-bold text-white">{stats.pending}</div>
-          <div className="text-xs text-gray-400">Kutish</div>
+          <div className="text-lg font-bold text-gray-900">{stats.pending}</div>
+          <div className="text-xs text-gray-600">Kutish</div>
         </div>
       </div>
 
       {/* Progress */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <span className="text-xs text-gray-400">Progress</span>
-          <span className="text-sm font-bold text-white">{stats.montajProgress}%</span>
+          <span className="text-xs text-gray-600">Progress</span>
+          <span className="text-sm font-bold text-gray-900">{stats.montajProgress}%</span>
         </div>
-        <div className="h-2 bg-gray-700/50 rounded-full overflow-hidden backdrop-blur-sm">
+        <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
           <div 
-            className={`h-full bg-gradient-to-r ${getProgressColor(stats.montajProgress)} rounded-full transition-all duration-1000 shadow-lg`}
+            className={`h-full bg-gradient-to-r ${getProgressColor(stats.montajProgress)} rounded-full transition-all duration-1000 shadow-sm`}
             style={{ width: `${Math.min(stats.montajProgress, 100)}%` }}
           ></div>
         </div>
@@ -356,13 +356,13 @@ export default function MobilograflarPage() {
 
   const getStatusBadge = (progress: number) => {
     if (progress >= 100) {
-      return { emoji: '🎉', label: 'Bajarildi', color: 'from-green-500 to-emerald-400', bg: 'bg-green-500/20', border: 'border-green-500/30', text: 'text-green-400' }
+      return { emoji: '🎉', label: 'Bajarildi', color: 'from-green-400 to-emerald-500', bg: 'bg-gradient-to-br from-green-50 to-emerald-50', border: 'border-green-300', text: 'text-green-700' }
     } else if (progress >= 70) {
-      return { emoji: '🚀', label: 'Yaxshi', color: 'from-blue-500 to-cyan-400', bg: 'bg-blue-500/20', border: 'border-blue-500/30', text: 'text-blue-400' }
+      return { emoji: '🚀', label: 'Yaxshi', color: 'from-blue-400 to-cyan-500', bg: 'bg-gradient-to-br from-blue-50 to-cyan-50', border: 'border-blue-300', text: 'text-blue-700' }
     } else if (progress >= 40) {
-      return { emoji: '⚠️', label: 'O\'rtacha', color: 'from-yellow-500 to-orange-400', bg: 'bg-yellow-500/20', border: 'border-yellow-500/30', text: 'text-yellow-400' }
+      return { emoji: '⚠️', label: 'O\'rtacha', color: 'from-yellow-400 to-orange-500', bg: 'bg-gradient-to-br from-yellow-50 to-orange-50', border: 'border-yellow-300', text: 'text-yellow-700' }
     } else {
-      return { emoji: '🔴', label: 'Past', color: 'from-red-500 to-pink-400', bg: 'bg-red-500/20', border: 'border-red-500/30', text: 'text-red-400' }
+      return { emoji: '🔴', label: 'Past', color: 'from-red-400 to-pink-500', bg: 'bg-gradient-to-br from-red-50 to-pink-50', border: 'border-red-300', text: 'text-red-700' }
     }
   }
 
@@ -370,8 +370,8 @@ export default function MobilograflarPage() {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <div className="inline-block w-16 h-16 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin mb-4"></div>
-          <p className="text-lg text-gray-400">Yuklanmoqda...</p>
+          <div className="inline-block w-16 h-16 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mb-4"></div>
+          <p className="text-lg text-gray-600">Yuklanmoqda...</p>
         </div>
       </div>
     )
@@ -380,17 +380,17 @@ export default function MobilograflarPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-gradient-to-br from-gray-800/80 to-gray-900/80 backdrop-blur-xl rounded-3xl p-8 border border-gray-700/50 shadow-2xl">
+      <div className="bg-gradient-to-br from-purple-500 to-pink-500 rounded-3xl p-8 shadow-xl shadow-purple-200">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-white mb-2">👥 Mobilograflar</h1>
-            <p className="text-gray-400">
+            <p className="text-purple-100">
               Faqat MONTAJ POST hisoblanadi
             </p>
           </div>
           <button
             onClick={() => setShowNewForm(!showNewForm)}
-            className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-6 py-3 rounded-2xl font-semibold transition-all duration-200 shadow-lg shadow-purple-500/30 hover:shadow-purple-500/50 hover:scale-105"
+            className="bg-white hover:bg-purple-50 text-purple-600 px-6 py-3 rounded-2xl font-semibold transition-all duration-200 shadow-lg hover:scale-105"
           >
             ➕ Yangi Mobilograf
           </button>
@@ -399,29 +399,29 @@ export default function MobilograflarPage() {
 
       {/* New Form */}
       {showNewForm && (
-        <div className="bg-gray-800/50 backdrop-blur-xl rounded-3xl p-8 border border-gray-700/50 shadow-xl">
-          <h2 className="text-xl font-bold text-white mb-6">📝 Yangi Mobilograf Qo'shish</h2>
+        <div className="bg-white rounded-3xl p-8 border border-gray-200 shadow-xl">
+          <h2 className="text-xl font-bold text-gray-900 mb-6">📝 Yangi Mobilograf Qo'shish</h2>
           <form onSubmit={handleCreate} className="space-y-5">
             <div>
-              <label className="block text-sm font-semibold text-gray-300 mb-2">Ism</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Ism</label>
               <input
                 type="text"
                 value={newMobilographer.name}
                 onChange={(e) => setNewMobilographer({ ...newMobilographer, name: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl bg-gray-900/50 border border-gray-700/50 text-white placeholder-gray-500 focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 transition-all outline-none backdrop-blur-sm"
+                className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 transition-all outline-none"
                 placeholder="Masalan: Og'abek"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-300 mb-2">Oylik maqsad (jami postlar)</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Oylik maqsad (jami postlar)</label>
               <input
                 type="number"
                 min="1"
                 value={newMobilographer.monthly_target}
                 onChange={(e) => setNewMobilographer({ ...newMobilographer, monthly_target: parseInt(e.target.value) })}
-                className="w-full px-4 py-3 rounded-xl bg-gray-900/50 border border-gray-700/50 text-white placeholder-gray-500 focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 transition-all outline-none backdrop-blur-sm"
+                className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 transition-all outline-none"
                 required
               />
             </div>
@@ -436,7 +436,7 @@ export default function MobilograflarPage() {
               <button
                 type="button"
                 onClick={() => setShowNewForm(false)}
-                className="px-6 bg-gray-700/50 hover:bg-gray-700/70 text-gray-300 py-3 rounded-xl font-semibold transition-all duration-200 backdrop-blur-sm"
+                className="px-6 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold transition-all duration-200"
               >
                 Bekor qilish
               </button>
@@ -447,28 +447,28 @@ export default function MobilograflarPage() {
 
       {/* Edit Form */}
       {editingMobilographer && (
-        <div className="bg-gray-800/50 backdrop-blur-xl rounded-3xl p-8 border border-gray-700/50 shadow-xl">
-          <h2 className="text-xl font-bold text-white mb-6">✏️ Tahrirlash: {editingMobilographer.name}</h2>
+        <div className="bg-white rounded-3xl p-8 border border-gray-200 shadow-xl">
+          <h2 className="text-xl font-bold text-gray-900 mb-6">✏️ Tahrirlash: {editingMobilographer.name}</h2>
           <form onSubmit={handleUpdate} className="space-y-5">
             <div>
-              <label className="block text-sm font-semibold text-gray-300 mb-2">Ism</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Ism</label>
               <input
                 type="text"
                 value={editingMobilographer.name}
                 onChange={(e) => setEditingMobilographer({ ...editingMobilographer, name: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl bg-gray-900/50 border border-gray-700/50 text-white placeholder-gray-500 focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all outline-none backdrop-blur-sm"
+                className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all outline-none"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-300 mb-2">Oylik maqsad (jami postlar)</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Oylik maqsad (jami postlar)</label>
               <input
                 type="number"
                 min="1"
                 value={editingMobilographer.monthly_target}
                 onChange={(e) => setEditingMobilographer({ ...editingMobilographer, monthly_target: parseInt(e.target.value) })}
-                className="w-full px-4 py-3 rounded-xl bg-gray-900/50 border border-gray-700/50 text-white placeholder-gray-500 focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all outline-none backdrop-blur-sm"
+                className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all outline-none"
                 required
               />
             </div>
@@ -483,7 +483,7 @@ export default function MobilograflarPage() {
               <button
                 type="button"
                 onClick={() => setEditingMobilographer(null)}
-                className="px-6 bg-gray-700/50 hover:bg-gray-700/70 text-gray-300 py-3 rounded-xl font-semibold transition-all duration-200 backdrop-blur-sm"
+                className="px-6 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold transition-all duration-200"
               >
                 Bekor qilish
               </button>
@@ -501,24 +501,24 @@ export default function MobilograflarPage() {
           return (
             <div 
               key={mob.id} 
-              className="bg-gray-800/50 backdrop-blur-xl rounded-3xl border border-gray-700/50 overflow-hidden hover:border-gray-600/50 transition-all duration-300 hover:shadow-2xl hover:shadow-purple-500/10 hover:scale-[1.02]"
+              className="bg-white rounded-3xl border border-gray-200 overflow-hidden hover:border-gray-300 transition-all duration-300 shadow-lg hover:shadow-2xl hover:scale-[1.02]"
             >
               {/* Header */}
-              <div className="bg-gradient-to-br from-gray-800/80 to-gray-900/80 backdrop-blur-xl p-6 border-b border-gray-700/50">
+              <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-6 border-b border-gray-200">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-4 flex-1">
-                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl font-bold ${status.bg} backdrop-blur-sm border ${status.border} shadow-lg`}>
+                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl font-bold ${status.bg} border-2 ${status.border} shadow-md`}>
                       {mob.name.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <h3 className="text-xl font-bold text-white mb-1">{mob.name}</h3>
-                      <p className="text-sm text-gray-400">{mob.projects.length} ta loyiha</p>
+                      <h3 className="text-xl font-bold text-gray-900 mb-1">{mob.name}</h3>
+                      <p className="text-sm text-gray-600">{mob.projects.length} ta loyiha</p>
                     </div>
                   </div>
                   <div className="flex gap-2">
                     <button
                       onClick={() => setEditingMobilographer(mob)}
-                      className="text-gray-400 hover:text-white transition-colors p-2"
+                      className="text-gray-400 hover:text-gray-700 transition-colors p-2"
                       title="Tahrirlash"
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -527,7 +527,7 @@ export default function MobilograflarPage() {
                     </button>
                     <button
                       onClick={() => handleDelete(mob.id, mob.name)}
-                      className="text-gray-400 hover:text-red-400 transition-colors p-2"
+                      className="text-gray-400 hover:text-red-500 transition-colors p-2"
                       title="O'chirish"
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -537,7 +537,7 @@ export default function MobilograflarPage() {
                   </div>
                 </div>
 
-                <div className={`inline-flex items-center gap-2 ${status.bg} ${status.text} px-4 py-2 rounded-xl text-sm font-semibold border ${status.border} backdrop-blur-sm`}>
+                <div className={`inline-flex items-center gap-2 ${status.bg} ${status.text} px-4 py-2 rounded-xl text-sm font-semibold border-2 ${status.border}`}>
                   <span className="text-lg">{status.emoji}</span>
                   {status.label}
                 </div>
@@ -548,15 +548,15 @@ export default function MobilograflarPage() {
                 {/* Progress */}
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm text-gray-400">Umumiy Progress</span>
+                    <span className="text-sm text-gray-600">Umumiy Progress</span>
                     <div className="text-right">
-                      <div className="text-2xl font-bold text-white">{mob.progress}%</div>
-                      <div className="text-xs text-gray-400">{mob.totalCompleted}/{mob.totalTarget} post</div>
+                      <div className="text-2xl font-bold text-gray-900">{mob.progress}%</div>
+                      <div className="text-xs text-gray-500">{mob.totalCompleted}/{mob.totalTarget} post</div>
                     </div>
                   </div>
-                  <div className="h-3 bg-gray-700/50 rounded-full overflow-hidden backdrop-blur-sm">
+                  <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
                     <div 
-                      className={`h-full bg-gradient-to-r ${status.color} rounded-full transition-all duration-1000 shadow-lg`}
+                      className={`h-full bg-gradient-to-r ${status.color} rounded-full transition-all duration-1000 shadow-md`}
                       style={{ width: `${Math.min(mob.progress, 100)}%` }}
                     ></div>
                   </div>
@@ -564,27 +564,27 @@ export default function MobilograflarPage() {
 
                 {/* Stats */}
                 <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-blue-500/10 backdrop-blur-sm rounded-xl p-3 border border-blue-500/20 text-center">
+                  <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-3 border border-blue-200 text-center">
                     <div className="text-2xl mb-1">📹</div>
-                    <div className="text-lg font-bold text-white">{mob.totalSyomka}</div>
-                    <div className="text-xs text-gray-400">Syomka</div>
+                    <div className="text-lg font-bold text-gray-900">{mob.totalSyomka}</div>
+                    <div className="text-xs text-gray-600">Syomka</div>
                   </div>
-                  <div className="bg-purple-500/10 backdrop-blur-sm rounded-xl p-3 border border-purple-500/20 text-center">
+                  <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-3 border border-purple-200 text-center">
                     <div className="text-2xl mb-1">🎬</div>
-                    <div className="text-lg font-bold text-white">{mob.totalCompleted}</div>
-                    <div className="text-xs text-gray-400">Montaj</div>
+                    <div className="text-lg font-bold text-gray-900">{mob.totalCompleted}</div>
+                    <div className="text-xs text-gray-600">Montaj</div>
                   </div>
-                  <div className="bg-yellow-500/10 backdrop-blur-sm rounded-xl p-3 border border-yellow-500/20 text-center">
+                  <div className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-xl p-3 border border-yellow-200 text-center">
                     <div className="text-2xl mb-1">⏳</div>
-                    <div className="text-lg font-bold text-white">{mob.totalPending}</div>
-                    <div className="text-xs text-gray-400">Kutish</div>
+                    <div className="text-lg font-bold text-gray-900">{mob.totalPending}</div>
+                    <div className="text-xs text-gray-600">Kutish</div>
                   </div>
                 </div>
 
                 {/* Projects */}
                 <div>
-                  <h4 className="font-semibold text-white text-sm mb-3 flex items-center gap-2">
-                    📁 Loyihalar {mob.projects.length === 0 && <span className="text-gray-500">(Yo'q)</span>}
+                  <h4 className="font-semibold text-gray-900 text-sm mb-3 flex items-center gap-2">
+                    📁 Loyihalar {mob.projects.length === 0 && <span className="text-gray-400">(Yo'q)</span>}
                   </h4>
 
                   {mob.projects.length > 0 ? (
@@ -600,15 +600,15 @@ export default function MobilograflarPage() {
                       {mob.projects.length > 2 && (
                         <button
                           onClick={() => setExpandedMobilographer(isExpanded ? null : mob.id)}
-                          className="w-full text-gray-400 hover:text-white text-sm font-medium py-2 transition-colors"
+                          className="w-full text-gray-600 hover:text-gray-900 text-sm font-medium py-2 transition-colors"
                         >
                           {isExpanded ? '▲ Kamroq ko\'rish' : `▼ Yana ${mob.projects.length - 2} ta ko'rish`}
                         </button>
                       )}
                     </div>
                   ) : (
-                    <div className="text-center py-8 bg-gray-700/20 rounded-xl border border-dashed border-gray-600/50">
-                      <p className="text-gray-500 text-sm">Loyihalar yo'q</p>
+                    <div className="text-center py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                      <p className="text-gray-400 text-sm">Loyihalar yo'q</p>
                     </div>
                   )}
                 </div>
@@ -619,9 +619,9 @@ export default function MobilograflarPage() {
       </div>
 
       {mobilographers.length === 0 && (
-        <div className="text-center py-20 bg-gray-800/30 backdrop-blur-xl rounded-3xl border-2 border-dashed border-gray-700/50">
+        <div className="text-center py-20 bg-gradient-to-br from-gray-50 to-gray-100 rounded-3xl border-2 border-dashed border-gray-300">
           <div className="text-7xl mb-6">👥</div>
-          <p className="text-gray-300 text-xl font-semibold mb-2">Mobilograflar yo'q</p>
+          <p className="text-gray-700 text-xl font-semibold mb-2">Mobilograflar yo'q</p>
           <p className="text-gray-500 text-sm mb-6">
             Yangi mobilograf qo'shish uchun yuqoridagi tugmani bosing
           </p>
