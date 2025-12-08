@@ -52,7 +52,6 @@ export default function KiritishPage() {
 
   const loadAvailableYears = async () => {
     try {
-      // ✅ UPDATED: Get years from tasks table
       const { data: tasks } = await supabase
         .from('tasks')
         .select('date')
@@ -126,7 +125,6 @@ export default function KiritishPage() {
       const startDateStr = startDate.toISOString().split('T')[0]
       const endDateStr = endDate.toISOString().split('T')[0]
 
-      // ✅ UPDATED: Get tasks instead of records
       const { data: tasksData } = await supabase
         .from('tasks')
         .select(`
@@ -167,7 +165,6 @@ export default function KiritishPage() {
 
       const count = task.count || 1
       
-      // ✅ UPDATED: Handle both 'editing'/'montaj' and 'filming'/'syomka'
       if (task.task_type === 'editing' || task.task_type === 'montaj') {
         if (task.content_type === 'post') {
           group.totalPost += count
@@ -246,13 +243,11 @@ export default function KiritishPage() {
     }
 
     try {
-      // ✅ Delete from tasks table
       await supabase
         .from('tasks')
         .delete()
         .eq('id', taskId)
 
-      // ✅ Also delete from records table if record_id exists (backward compatibility)
       if (recordId) {
         const { data: videos } = await supabase
           .from('videos')
@@ -316,10 +311,9 @@ export default function KiritishPage() {
         durationMinutes = duration.minutes
       }
 
-      // ✅ Map type names for tasks table
       const taskType = newTask.type === 'filming' ? 'syomka' : newTask.type === 'editing' ? 'montaj' : 'tahrirlash'
 
-      // ✅ STEP 1: Insert into records table (backward compatibility)
+      // STEP 1: Insert into records table (backward compatibility)
       const { data: createdRecord, error: recordError } = await supabase
         .from('records')
         .insert([{
@@ -341,7 +335,7 @@ export default function KiritishPage() {
       if (recordError) throw recordError
       const recordId = createdRecord.id
 
-      // ✅ STEP 2: Insert into tasks table (new system)
+      // STEP 2: Insert into tasks table (new system)
       const { data: createdTask, error: taskError } = await supabase
         .from('tasks')
         .insert([{
@@ -363,7 +357,6 @@ export default function KiritishPage() {
 
       if (taskError) throw taskError
 
-      // Create work_date from selected work_year and work_month
       const workDate = new Date(newTask.work_year, newTask.work_month - 1, 15)
 
       if (newTask.type === 'editing') {
@@ -502,14 +495,7 @@ export default function KiritishPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="p-8 space-y-6">
-            {/* ... Rest of the form stays EXACTLY THE SAME ... */}
-            {/* I'm keeping all the form fields identical to maintain user experience */}
-            
-            {/* The form submission logic above has been updated to use tasks table */}
-            {/* All other JSX below this comment remains unchanged */}
-
-{/* Form continues with all original fields... */}
-<div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-semibold mb-2 text-gray-700">
                   📅 Sana
