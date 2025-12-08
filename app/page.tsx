@@ -43,7 +43,6 @@ export default function DashboardPage() {
 
     const projectsWithProgress = await Promise.all(
       (projectsData || []).map(async (project) => {
-        // ✅ UPDATED: Get completed tasks from tasks table
         const { data: completedTasks } = await supabase
           .from('tasks')
           .select('*')
@@ -68,7 +67,6 @@ export default function DashboardPage() {
       })
     )
 
-    // Calculate monthly totals
     const totalTarget = projectsWithProgress.reduce((sum, p) => sum + (p.monthly_target || 0), 0)
     const totalCompleted = projectsWithProgress.reduce((sum, p) => sum + p.completed, 0)
     setMonthlyTarget({ total: totalTarget, completed: totalCompleted })
@@ -89,7 +87,6 @@ export default function DashboardPage() {
   const fetchTodayWorkload = async () => {
     const today = new Date().toISOString().split('T')[0]
 
-    // ✅ UPDATED: Get tasks instead of records
     const { data: tasks } = await supabase
       .from('tasks')
       .select(`
@@ -114,7 +111,6 @@ export default function DashboardPage() {
         }
         const count = task.count || 1
         
-        // Count by task type
         if (task.task_type === 'editing' || task.task_type === 'montaj') {
           if (task.content_type === 'post') totalPost += count
           else if (task.content_type === 'storis') totalStoris += count
@@ -186,7 +182,6 @@ export default function DashboardPage() {
       date.setDate(today.getDate() - i)
       const dateStr = date.toISOString().split('T')[0]
 
-      // ✅ UPDATED: Get tasks instead of records
       const { data: tasks } = await supabase
         .from('tasks')
         .select('*')
@@ -260,7 +255,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Today's Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-3">
@@ -343,7 +337,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Today's Workload */}
       <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-100 overflow-hidden">
         <div className="bg-gradient-to-r from-blue-500 to-purple-600 p-6 text-white">
           <h2 className="text-2xl font-bold">📊 Bugungi Ish Yuki</h2>
@@ -428,7 +421,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Weekly Trend */}
       <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-100 overflow-hidden">
         <div className="bg-gradient-to-r from-purple-500 to-pink-600 p-6 text-white">
           <h2 className="text-2xl font-bold">📈 Haftalik Trend</h2>
@@ -472,7 +464,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Projects Progress */}
       <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-100 overflow-hidden">
         <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-6 text-white">
           <h2 className="text-2xl font-bold">🎯 Loyihalar Progress</h2>
@@ -515,7 +506,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Link href="/kiritish" className="block">
           <div className="bg-gradient-to-br from-green-500 to-emerald-600 text-white rounded-2xl p-6 hover:scale-105 transition-transform cursor-pointer shadow-lg">
