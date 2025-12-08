@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase, type Task, type Mobilographer, type Project } from '@/lib/supabase'
 
-interface GroupedRecord {
+interface GroupedTask {
   project: any
   mobilographer: any
-  records: any[]
+  tasks: any[]
   totalPost: number
   totalStoris: number
   totalSyomka: number
@@ -14,9 +14,9 @@ interface GroupedRecord {
 }
 
 export default function KiritishPage() {
-  const [mobilographers, setMobilographers] = useState<any[]>([])
-  const [projects, setProjects] = useState<any[]>([])
-  const [groupedRecords, setGroupedRecords] = useState<GroupedRecord[]>([])
+  const [mobilographers, setMobilographers] = useState<Mobilographer[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
+  const [groupedTasks, setGroupedTasks] = useState<GroupedTask[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
@@ -26,7 +26,7 @@ export default function KiritishPage() {
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1)
   const [availableYears, setAvailableYears] = useState<number[]>([])
   
-  const [newRecord, setNewRecord] = useState({
+  const [newTask, setNewTask] = useState({
     mobilographer_id: '',
     project_id: '',
     type: 'editing',
@@ -47,25 +47,26 @@ export default function KiritishPage() {
   }, [])
 
   useEffect(() => {
-    fetchRecordsByFilter()
+    fetchTasksByFilter()
   }, [filterType, selectedYear, selectedMonth])
 
   const loadAvailableYears = async () => {
     try {
-      const { data: records } = await supabase
-        .from('records')
+      // ✅ UPDATED: Get years from tasks table
+      const { data: tasks } = await supabase
+        .from('tasks')
         .select('date')
         .order('date', { ascending: false })
 
-      if (!records || records.length === 0) {
+      if (!tasks || tasks.length === 0) {
         setAvailableYears([new Date().getFullYear()])
         return
       }
 
       const years = new Set<number>()
-      records.forEach(record => {
-        if (record.date) {
-          const year = new Date(record.date).getFullYear()
+      tasks.forEach(task => {
+        if (task.date) {
+          const year = new Date(task.date).getFullYear()
           years.add(year)
         }
       })
@@ -99,7 +100,7 @@ export default function KiritishPage() {
     }
   }
 
-  const fetchRecordsByFilter = async () => {
+  const fetchTasksByFilter = async () => {
     try {
       const today = new Date()
       let startDate: Date
@@ -125,8 +126,9 @@ export default function KiritishPage() {
       const startDateStr = startDate.toISOString().split('T')[0]
       const endDateStr = endDate.toISOString().split('T')[0]
 
-      const { data: recordsData } = await supabase
-        .from('records')
+      // ✅ UPDATED: Get tasks instead of records
+      const { data: tasksData } = await supabase
+        .from('tasks')
         .select(`
           *,
           mobilographers(id, name),
@@ -136,23 +138,23 @@ export default function KiritishPage() {
         .lte('date', endDateStr)
         .order('created_at', { ascending: false })
 
-      groupRecords(recordsData || [])
+      groupTasks(tasksData || [])
     } catch (error) {
-      console.error('Error fetching records:', error)
+      console.error('Error fetching tasks:', error)
     }
   }
 
-  const groupRecords = (records: any[]) => {
-    const grouped = new Map<string, GroupedRecord>()
+  const groupTasks = (tasks: any[]) => {
+    const grouped = new Map<string, GroupedTask>()
 
-    records.forEach(record => {
-      const key = `${record.project_id}-${record.mobilographer_id}`
+    tasks.forEach(task => {
+      const key = `${task.project_id}-${task.mobilographer_id}`
       
       if (!grouped.has(key)) {
         grouped.set(key, {
-          project: record.projects,
-          mobilographer: record.mobilographers,
-          records: [],
+          project: task.projects,
+          mobilographer: task.mobilographers,
+          tasks: [],
           totalPost: 0,
           totalStoris: 0,
           totalSyomka: 0,
@@ -161,23 +163,25 @@ export default function KiritishPage() {
       }
 
       const group = grouped.get(key)!
-      group.records.push(record)
+      group.tasks.push(task)
 
-      const count = record.count || 1
-      if (record.type === 'editing') {
-        if (record.content_type === 'post') {
+      const count = task.count || 1
+      
+      // ✅ UPDATED: Handle both 'editing'/'montaj' and 'filming'/'syomka'
+      if (task.task_type === 'editing' || task.task_type === 'montaj') {
+        if (task.content_type === 'post') {
           group.totalPost += count
-        } else if (record.content_type === 'storis') {
+        } else if (task.content_type === 'storis') {
           group.totalStoris += count
         }
-      } else if (record.type === 'filming') {
+      } else if (task.task_type === 'filming' || task.task_type === 'syomka') {
         group.totalSyomka += count
-      } else if (record.type === 'tahrirlash') {
+      } else if (task.task_type === 'tahrirlash') {
         group.totalTahrirlash += count
       }
     })
 
-    setGroupedRecords(Array.from(grouped.values()))
+    setGroupedTasks(Array.from(grouped.values()))
   }
 
   const calculateDuration = (start: string, end: string): { minutes: number, text: string } => {
@@ -234,46 +238,55 @@ export default function KiritishPage() {
     return `${getMonthName(selectedMonth)} ${selectedYear}`
   }
 
-  const handleDelete = async (id: string) => {
-    if (deleteConfirm !== id) {
-      setDeleteConfirm(id)
+  const handleDelete = async (taskId: string, recordId: string | null) => {
+    if (deleteConfirm !== taskId) {
+      setDeleteConfirm(taskId)
       setTimeout(() => setDeleteConfirm(null), 3000)
       return
     }
 
     try {
-      const { data: videos } = await supabase
-        .from('videos')
-        .select('*')
-        .eq('record_id', id)
+      // ✅ Delete from tasks table
+      await supabase
+        .from('tasks')
+        .delete()
+        .eq('id', taskId)
 
-      if (videos && videos.length > 0) {
-        for (const video of videos) {
-          if (video.editing_status === 'completed') {
-            await supabase
-              .from('videos')
-              .update({ 
-                editing_status: 'pending', 
-                record_id: null 
-              })
-              .eq('id', video.id)
-          } else {
-            await supabase
-              .from('videos')
-              .delete()
-              .eq('id', video.id)
+      // ✅ Also delete from records table if record_id exists (backward compatibility)
+      if (recordId) {
+        const { data: videos } = await supabase
+          .from('videos')
+          .select('*')
+          .eq('record_id', recordId)
+
+        if (videos && videos.length > 0) {
+          for (const video of videos) {
+            if (video.editing_status === 'completed') {
+              await supabase
+                .from('videos')
+                .update({ 
+                  editing_status: 'pending', 
+                  record_id: null 
+                })
+                .eq('id', video.id)
+            } else {
+              await supabase
+                .from('videos')
+                .delete()
+                .eq('id', video.id)
+            }
           }
         }
-      }
 
-      await supabase
-        .from('records')
-        .delete()
-        .eq('id', id)
+        await supabase
+          .from('records')
+          .delete()
+          .eq('id', recordId)
+      }
 
       alert('✅ Yozuv o\'chirildi!')
       setDeleteConfirm(null)
-      fetchRecordsByFilter()
+      fetchTasksByFilter()
     } catch (error) {
       console.error('Delete error:', error)
       alert('❌ Xatolik: ' + (error as Error).message)
@@ -283,13 +296,13 @@ export default function KiritishPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!newRecord.mobilographer_id || !newRecord.project_id || newRecord.count < 1) {
+    if (!newTask.mobilographer_id || !newTask.project_id || newTask.count < 1) {
       alert('Iltimos, barcha majburiy maydonlarni to\'ldiring!')
       return
     }
 
-    if (!newRecord.start_time || !newRecord.end_time) {
-      const typeName = newRecord.type === 'editing' ? 'Montaj' : newRecord.type === 'filming' ? 'Syomka' : 'Tahrirlash'
+    if (!newTask.start_time || !newTask.end_time) {
+      const typeName = newTask.type === 'editing' ? 'Montaj' : newTask.type === 'filming' ? 'Syomka' : 'Tahrirlash'
       alert(`${typeName} uchun boshlangan va tugagan vaqtni kiriting!`)
       return
     }
@@ -298,44 +311,69 @@ export default function KiritishPage() {
 
     try {
       let durationMinutes = null
-      if (newRecord.start_time && newRecord.end_time) {
-        const duration = calculateDuration(newRecord.start_time, newRecord.end_time)
+      if (newTask.start_time && newTask.end_time) {
+        const duration = calculateDuration(newTask.start_time, newTask.end_time)
         durationMinutes = duration.minutes
       }
 
+      // ✅ Map type names for tasks table
+      const taskType = newTask.type === 'filming' ? 'syomka' : newTask.type === 'editing' ? 'montaj' : 'tahrirlash'
+
+      // ✅ STEP 1: Insert into records table (backward compatibility)
       const { data: createdRecord, error: recordError } = await supabase
         .from('records')
         .insert([{
-          mobilographer_id: newRecord.mobilographer_id,
-          project_id: newRecord.project_id,
-          type: newRecord.type,
-          content_type: newRecord.type === 'editing' ? newRecord.content_type : null,
-          date: newRecord.date,
-          time: newRecord.time || null,
-          start_time: newRecord.start_time || null,
-          end_time: newRecord.end_time || null,
+          mobilographer_id: newTask.mobilographer_id,
+          project_id: newTask.project_id,
+          type: newTask.type,
+          content_type: newTask.type === 'editing' ? newTask.content_type : null,
+          date: newTask.date,
+          time: newTask.time || null,
+          start_time: newTask.start_time || null,
+          end_time: newTask.end_time || null,
           duration_minutes: durationMinutes,
-          notes: newRecord.notes || null,
-          count: newRecord.count
+          notes: newTask.notes || null,
+          count: newTask.count
         }])
         .select()
         .single()
 
       if (recordError) throw recordError
-
       const recordId = createdRecord.id
 
-      // Create work_date from selected work_year and work_month
-      const workDate = new Date(newRecord.work_year, newRecord.work_month - 1, 15)
+      // ✅ STEP 2: Insert into tasks table (new system)
+      const { data: createdTask, error: taskError } = await supabase
+        .from('tasks')
+        .insert([{
+          mobilographer_id: newTask.mobilographer_id,
+          project_id: newTask.project_id,
+          task_type: taskType,
+          content_type: newTask.type === 'editing' ? newTask.content_type : null,
+          date: newTask.date,
+          start_time: newTask.start_time || null,
+          end_time: newTask.end_time || null,
+          duration_minutes: durationMinutes,
+          notes: newTask.notes || null,
+          count: newTask.count,
+          status: 'completed',
+          record_id: recordId
+        }])
+        .select()
+        .single()
 
-      if (newRecord.type === 'editing') {
+      if (taskError) throw taskError
+
+      // Create work_date from selected work_year and work_month
+      const workDate = new Date(newTask.work_year, newTask.work_month - 1, 15)
+
+      if (newTask.type === 'editing') {
         const { data: pendingVideos } = await supabase
           .from('videos')
           .select('id')
-          .eq('project_id', newRecord.project_id)
+          .eq('project_id', newTask.project_id)
           .eq('editing_status', 'pending')
           .is('record_id', null)
-          .limit(newRecord.count)
+          .limit(newTask.count)
 
         if (pendingVideos && pendingVideos.length > 0) {
           const videoIds = pendingVideos.map(v => v.id)
@@ -343,7 +381,7 @@ export default function KiritishPage() {
             .from('videos')
             .update({ 
               editing_status: 'completed',
-              content_type: newRecord.content_type,
+              content_type: newTask.content_type,
               task_type: 'montaj',
               record_id: recordId,
               work_date: workDate.toISOString()
@@ -351,13 +389,13 @@ export default function KiritishPage() {
             .in('id', videoIds)
         } else {
           const videosToInsert = []
-          for (let i = 0; i < newRecord.count; i++) {
+          for (let i = 0; i < newTask.count; i++) {
             videosToInsert.push({
-              project_id: newRecord.project_id,
+              project_id: newTask.project_id,
               name: `Video ${Date.now()}-${i + 1}`,
               filming_status: 'completed',
               editing_status: 'completed',
-              content_type: newRecord.content_type,
+              content_type: newTask.content_type,
               task_type: 'montaj',
               record_id: recordId,
               work_date: workDate.toISOString()
@@ -367,11 +405,11 @@ export default function KiritishPage() {
         }
       }
 
-      if (newRecord.type === 'filming') {
+      if (newTask.type === 'filming') {
         const videosToInsert = []
-        for (let i = 0; i < newRecord.count; i++) {
+        for (let i = 0; i < newTask.count; i++) {
           videosToInsert.push({
-            project_id: newRecord.project_id,
+            project_id: newTask.project_id,
             name: `Video ${Date.now()}-${i + 1}`,
             filming_status: 'completed',
             editing_status: 'pending',
@@ -384,17 +422,15 @@ export default function KiritishPage() {
         await supabase.from('videos').insert(videosToInsert)
       }
 
-      if (newRecord.type === 'tahrirlash') {
-        // Tahrirlash - mijoz qaytargan video
-        // Bu loyiha maqsadiga hisoblanmaydi, faqat vaqt/ball hisoblanadi
+      if (newTask.type === 'tahrirlash') {
         const videosToInsert = []
-        for (let i = 0; i < newRecord.count; i++) {
+        for (let i = 0; i < newTask.count; i++) {
           videosToInsert.push({
-            project_id: newRecord.project_id,
+            project_id: newTask.project_id,
             name: `Video ${Date.now()}-${i + 1}`,
             filming_status: 'completed',
             editing_status: 'completed',
-            content_type: null, // Tahrirlash uchun content_type yo'q
+            content_type: null,
             task_type: 'tahrirlash',
             record_id: recordId,
             work_date: workDate.toISOString()
@@ -404,15 +440,15 @@ export default function KiritishPage() {
       }
 
       const durationText = durationMinutes ? ` (${formatDuration(durationMinutes)})` : ''
-      const typeText = newRecord.type === 'editing' 
-        ? (newRecord.content_type === 'post' ? 'post' : 'storis') 
-        : newRecord.type === 'tahrirlash' 
+      const typeText = newTask.type === 'editing' 
+        ? (newTask.content_type === 'post' ? 'post' : 'storis') 
+        : newTask.type === 'tahrirlash' 
         ? 'tahrirlash (qaytarilgan)' 
         : 'syomka'
       
-      alert(`✅ ${newRecord.count} ta ${typeText} muvaffaqiyatli qo'shildi!${durationText}\n\n📅 ${getMonthName(newRecord.work_month)} ${newRecord.work_year} uchun saqlandi!`)
+      alert(`✅ ${newTask.count} ta ${typeText} muvaffaqiyatli qo'shildi!${durationText}\n\n📅 ${getMonthName(newTask.work_month)} ${newTask.work_year} uchun saqlandi!`)
       
-      setNewRecord({
+      setNewTask({
         mobilographer_id: '',
         project_id: '',
         type: 'editing',
@@ -427,7 +463,7 @@ export default function KiritishPage() {
         work_month: new Date().getMonth() + 1
       })
       
-      fetchRecordsByFilter()
+      fetchTasksByFilter()
       loadAvailableYears()
       setSubmitting(false)
     } catch (error) {
@@ -466,15 +502,22 @@ export default function KiritishPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="p-8 space-y-6">
-            <div className="grid grid-cols-2 gap-6">
+            {/* ... Rest of the form stays EXACTLY THE SAME ... */}
+            {/* I'm keeping all the form fields identical to maintain user experience */}
+            
+            {/* The form submission logic above has been updated to use tasks table */}
+            {/* All other JSX below this comment remains unchanged */}
+
+{/* Form continues with all original fields... */}
+<div className="grid grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-semibold mb-2 text-gray-700">
                   📅 Sana
                 </label>
                 <input
                   type="date"
-                  value={newRecord.date}
-                  onChange={(e) => setNewRecord({ ...newRecord, date: e.target.value })}
+                  value={newTask.date}
+                  onChange={(e) => setNewTask({ ...newTask, date: e.target.value })}
                   className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all outline-none text-lg"
                   required
                 />
@@ -486,14 +529,13 @@ export default function KiritishPage() {
                 </label>
                 <input
                   type="time"
-                  value={newRecord.time}
-                  onChange={(e) => setNewRecord({ ...newRecord, time: e.target.value })}
+                  value={newTask.time}
+                  onChange={(e) => setNewTask({ ...newTask, time: e.target.value })}
                   className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all outline-none text-lg"
                 />
               </div>
             </div>
 
-            {/* Qaysi oy uchun */}
             <div className="bg-gradient-to-br from-blue-50 to-purple-50 border-2 border-blue-300 rounded-2xl p-6">
               <label className="block text-lg font-bold mb-4 text-gray-800 flex items-center gap-2">
                 📅 Qaysi oy uchun?
@@ -504,8 +546,8 @@ export default function KiritishPage() {
                     Yil
                   </label>
                   <select
-                    value={newRecord.work_year}
-                    onChange={(e) => setNewRecord({ ...newRecord, work_year: parseInt(e.target.value) })}
+                    value={newTask.work_year}
+                    onChange={(e) => setNewTask({ ...newTask, work_year: parseInt(e.target.value) })}
                     className="w-full px-4 py-3 rounded-xl border-2 border-purple-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all outline-none font-semibold text-lg"
                   >
                     <option value={2024}>2024 yil</option>
@@ -519,8 +561,8 @@ export default function KiritishPage() {
                     Oy
                   </label>
                   <select
-                    value={newRecord.work_month}
-                    onChange={(e) => setNewRecord({ ...newRecord, work_month: parseInt(e.target.value) })}
+                    value={newTask.work_month}
+                    onChange={(e) => setNewTask({ ...newTask, work_month: parseInt(e.target.value) })}
                     className="w-full px-4 py-3 rounded-xl border-2 border-blue-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none font-semibold text-lg"
                   >
                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(month => (
@@ -531,7 +573,7 @@ export default function KiritishPage() {
               </div>
               <div className="mt-4 bg-white rounded-xl p-4 border-2 border-blue-200">
                 <p className="text-center text-lg font-bold text-gray-800">
-                  📊 Tanlandi: <span className="text-blue-600">{getMonthName(newRecord.work_month)} {newRecord.work_year}</span>
+                  📊 Tanlandi: <span className="text-blue-600">{getMonthName(newTask.work_month)} {newTask.work_year}</span>
                 </p>
               </div>
             </div>
@@ -541,8 +583,8 @@ export default function KiritishPage() {
                 👤 Kim? (Mobilograf)
               </label>
               <select
-                value={newRecord.mobilographer_id}
-                onChange={(e) => setNewRecord({ ...newRecord, mobilographer_id: e.target.value })}
+                value={newTask.mobilographer_id}
+                onChange={(e) => setNewTask({ ...newTask, mobilographer_id: e.target.value })}
                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all outline-none text-lg"
                 required
               >
@@ -560,13 +602,13 @@ export default function KiritishPage() {
                 📁 Loyiha?
               </label>
               <select
-                value={newRecord.project_id}
-                onChange={(e) => setNewRecord({ ...newRecord, project_id: e.target.value })}
+                value={newTask.project_id}
+                onChange={(e) => setNewTask({ ...newTask, project_id: e.target.value })}
                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all outline-none text-lg"
                 required
               >
                 <option value="">Tanlang...</option>
-                {projects.map((p) => (
+                {projects.map((p: any) => (
                   <option key={p.id} value={p.id}>
                     {p.name} ({p.mobilographers?.name})
                   </option>
@@ -581,9 +623,9 @@ export default function KiritishPage() {
               <div className="grid grid-cols-3 gap-4">
                 <button
                   type="button"
-                  onClick={() => setNewRecord({ ...newRecord, type: 'filming' })}
+                  onClick={() => setNewTask({ ...newTask, type: 'filming' })}
                   className={`py-6 rounded-2xl font-bold text-lg transition-all duration-200 transform hover:scale-105 ${
-                    newRecord.type === 'filming'
+                    newTask.type === 'filming'
                       ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-2xl scale-105'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
@@ -593,9 +635,9 @@ export default function KiritishPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setNewRecord({ ...newRecord, type: 'editing' })}
+                  onClick={() => setNewTask({ ...newTask, type: 'editing' })}
                   className={`py-6 rounded-2xl font-bold text-lg transition-all duration-200 transform hover:scale-105 ${
-                    newRecord.type === 'editing'
+                    newTask.type === 'editing'
                       ? 'bg-gradient-to-br from-purple-500 to-purple-600 text-white shadow-2xl scale-105'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
@@ -605,9 +647,9 @@ export default function KiritishPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setNewRecord({ ...newRecord, type: 'tahrirlash' })}
+                  onClick={() => setNewTask({ ...newTask, type: 'tahrirlash' })}
                   className={`py-6 rounded-2xl font-bold text-lg transition-all duration-200 transform hover:scale-105 ${
-                    newRecord.type === 'tahrirlash'
+                    newTask.type === 'tahrirlash'
                       ? 'bg-gradient-to-br from-yellow-500 to-amber-500 text-white shadow-2xl scale-105'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
@@ -619,7 +661,7 @@ export default function KiritishPage() {
               </div>
             </div>
 
-            {newRecord.type === 'editing' && (
+            {newTask.type === 'editing' && (
               <>
                 <div>
                   <label className="block text-sm font-semibold mb-3 text-gray-700">
@@ -628,9 +670,9 @@ export default function KiritishPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <button
                       type="button"
-                      onClick={() => setNewRecord({ ...newRecord, content_type: 'post' })}
+                      onClick={() => setNewTask({ ...newTask, content_type: 'post' })}
                       className={`py-6 rounded-2xl font-bold text-lg transition-all duration-200 transform hover:scale-105 ${
-                        newRecord.content_type === 'post'
+                        newTask.content_type === 'post'
                           ? 'bg-gradient-to-br from-green-500 to-green-600 text-white shadow-2xl scale-105'
                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                       }`}
@@ -641,9 +683,9 @@ export default function KiritishPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setNewRecord({ ...newRecord, content_type: 'storis' })}
+                      onClick={() => setNewTask({ ...newTask, content_type: 'storis' })}
                       className={`py-6 rounded-2xl font-bold text-lg transition-all duration-200 transform hover:scale-105 ${
-                        newRecord.content_type === 'storis'
+                        newTask.content_type === 'storis'
                           ? 'bg-gradient-to-br from-pink-500 to-pink-600 text-white shadow-2xl scale-105'
                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                       }`}
@@ -666,8 +708,8 @@ export default function KiritishPage() {
                       </label>
                       <input
                         type="time"
-                        value={newRecord.start_time}
-                        onChange={(e) => setNewRecord({ ...newRecord, start_time: e.target.value })}
+                        value={newTask.start_time}
+                        onChange={(e) => setNewTask({ ...newTask, start_time: e.target.value })}
                         className="w-full px-4 py-3 rounded-xl border-2 border-blue-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none text-lg font-semibold"
                         required
                       />
@@ -678,17 +720,17 @@ export default function KiritishPage() {
                       </label>
                       <input
                         type="time"
-                        value={newRecord.end_time}
-                        onChange={(e) => setNewRecord({ ...newRecord, end_time: e.target.value })}
+                        value={newTask.end_time}
+                        onChange={(e) => setNewTask({ ...newTask, end_time: e.target.value })}
                         className="w-full px-4 py-3 rounded-xl border-2 border-blue-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none text-lg font-semibold"
                         required
                       />
                     </div>
                   </div>
-                  {newRecord.start_time && newRecord.end_time && (
+                  {newTask.start_time && newTask.end_time && (
                     <div className="mt-4 bg-white rounded-xl p-4 border-2 border-blue-200">
                       <p className="text-center text-lg font-bold text-gray-800">
-                        ⏳ Jami: <span className="text-blue-600">{calculateDuration(newRecord.start_time, newRecord.end_time).text}</span>
+                        ⏳ Jami: <span className="text-blue-600">{calculateDuration(newTask.start_time, newTask.end_time).text}</span>
                       </p>
                     </div>
                   )}
@@ -696,7 +738,7 @@ export default function KiritishPage() {
               </>
             )}
 
-            {newRecord.type === 'filming' && (
+            {newTask.type === 'filming' && (
               <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-2xl p-6">
                 <label className="block text-lg font-bold mb-4 text-gray-800 flex items-center gap-2">
                   ⏱️ Syomka vaqti (Majburiy)
@@ -708,8 +750,8 @@ export default function KiritishPage() {
                     </label>
                     <input
                       type="time"
-                      value={newRecord.start_time}
-                      onChange={(e) => setNewRecord({ ...newRecord, start_time: e.target.value })}
+                      value={newTask.start_time}
+                      onChange={(e) => setNewTask({ ...newTask, start_time: e.target.value })}
                       className="w-full px-4 py-3 rounded-xl border-2 border-blue-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none text-lg font-semibold"
                       required
                     />
@@ -720,24 +762,24 @@ export default function KiritishPage() {
                     </label>
                     <input
                       type="time"
-                      value={newRecord.end_time}
-                      onChange={(e) => setNewRecord({ ...newRecord, end_time: e.target.value })}
+                      value={newTask.end_time}
+                      onChange={(e) => setNewTask({ ...newTask, end_time: e.target.value })}
                       className="w-full px-4 py-3 rounded-xl border-2 border-blue-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none text-lg font-semibold"
                       required
                     />
                   </div>
                 </div>
-                {newRecord.start_time && newRecord.end_time && (
+                {newTask.start_time && newTask.end_time && (
                   <div className="mt-4 bg-white rounded-xl p-4 border-2 border-blue-200">
                     <p className="text-center text-lg font-bold text-gray-800">
-                      ⏳ Jami: <span className="text-blue-600">{calculateDuration(newRecord.start_time, newRecord.end_time).text}</span>
+                      ⏳ Jami: <span className="text-blue-600">{calculateDuration(newTask.start_time, newTask.end_time).text}</span>
                     </p>
                   </div>
                 )}
               </div>
             )}
 
-            {newRecord.type === 'tahrirlash' && (
+            {newTask.type === 'tahrirlash' && (
               <div className="bg-gradient-to-br from-yellow-50 to-amber-50 border-2 border-yellow-300 rounded-2xl p-6">
                 <label className="block text-lg font-bold mb-4 text-gray-800 flex items-center gap-2">
                   ⏱️ Tahrirlash vaqti (Majburiy)
@@ -752,8 +794,8 @@ export default function KiritishPage() {
                     </label>
                     <input
                       type="time"
-                      value={newRecord.start_time}
-                      onChange={(e) => setNewRecord({ ...newRecord, start_time: e.target.value })}
+                      value={newTask.start_time}
+                      onChange={(e) => setNewTask({ ...newTask, start_time: e.target.value })}
                       className="w-full px-4 py-3 rounded-xl border-2 border-yellow-200 focus:border-yellow-500 focus:ring-4 focus:ring-yellow-100 transition-all outline-none text-lg font-semibold"
                       required
                     />
@@ -764,17 +806,17 @@ export default function KiritishPage() {
                     </label>
                     <input
                       type="time"
-                      value={newRecord.end_time}
-                      onChange={(e) => setNewRecord({ ...newRecord, end_time: e.target.value })}
+                      value={newTask.end_time}
+                      onChange={(e) => setNewTask({ ...newTask, end_time: e.target.value })}
                       className="w-full px-4 py-3 rounded-xl border-2 border-yellow-200 focus:border-yellow-500 focus:ring-4 focus:ring-yellow-100 transition-all outline-none text-lg font-semibold"
                       required
                     />
                   </div>
                 </div>
-                {newRecord.start_time && newRecord.end_time && (
+                {newTask.start_time && newTask.end_time && (
                   <div className="mt-4 bg-white rounded-xl p-4 border-2 border-yellow-200">
                     <p className="text-center text-lg font-bold text-gray-800">
-                      ⏳ Jami: <span className="text-yellow-600">{calculateDuration(newRecord.start_time, newRecord.end_time).text}</span>
+                      ⏳ Jami: <span className="text-yellow-600">{calculateDuration(newTask.start_time, newTask.end_time).text}</span>
                     </p>
                   </div>
                 )}
@@ -784,15 +826,15 @@ export default function KiritishPage() {
             <div className="bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-yellow-300 rounded-2xl p-6">
               <label className="block text-lg font-bold mb-3 text-gray-800">
                 🔢 Nechta {
-                  newRecord.type === 'editing' 
-                    ? (newRecord.content_type === 'post' ? 'post' : 'storis') 
-                    : newRecord.type === 'tahrirlash' 
+                  newTask.type === 'editing' 
+                    ? (newTask.content_type === 'post' ? 'post' : 'storis') 
+                    : newTask.type === 'tahrirlash' 
                     ? 'video' 
                     : 'video'
                 } {
-                  newRecord.type === 'editing' 
+                  newTask.type === 'editing' 
                     ? 'montaj qilindi' 
-                    : newRecord.type === 'tahrirlash' 
+                    : newTask.type === 'tahrirlash' 
                     ? 'tahrirlandi (qaytarilgan)' 
                     : 'suratga olindi'
                 }?
@@ -800,7 +842,7 @@ export default function KiritishPage() {
               <div className="flex items-center gap-4">
                 <button
                   type="button"
-                  onClick={() => setNewRecord({ ...newRecord, count: Math.max(1, newRecord.count - 1) })}
+                  onClick={() => setNewTask({ ...newTask, count: Math.max(1, newTask.count - 1) })}
                   className="w-16 h-16 bg-red-500 hover:bg-red-600 text-white rounded-xl text-3xl font-bold transition transform hover:scale-110"
                 >
                   −
@@ -809,24 +851,24 @@ export default function KiritishPage() {
                   type="number"
                   min="1"
                   max="100"
-                  value={newRecord.count}
-                  onChange={(e) => setNewRecord({ ...newRecord, count: Math.max(1, parseInt(e.target.value) || 1) })}
+                  value={newTask.count}
+                  onChange={(e) => setNewTask({ ...newTask, count: Math.max(1, parseInt(e.target.value) || 1) })}
                   className="flex-1 text-center text-6xl font-bold py-6 rounded-2xl border-4 border-yellow-400 focus:border-yellow-500 focus:ring-4 focus:ring-yellow-200 transition-all outline-none"
                   required
                 />
                 <button
                   type="button"
-                  onClick={() => setNewRecord({ ...newRecord, count: newRecord.count + 1 })}
+                  onClick={() => setNewTask({ ...newTask, count: newTask.count + 1 })}
                   className="w-16 h-16 bg-green-500 hover:bg-green-600 text-white rounded-xl text-3xl font-bold transition transform hover:scale-110"
                 >
                   +
                 </button>
               </div>
               <p className="text-center text-lg font-semibold text-gray-700 mt-4">
-                {newRecord.count} ta {
-                  newRecord.type === 'editing' 
-                    ? (newRecord.content_type === 'post' ? '📄 post' : '📱 storis') 
-                    : newRecord.type === 'tahrirlash' 
+                {newTask.count} ta {
+                  newTask.type === 'editing' 
+                    ? (newTask.content_type === 'post' ? '📄 post' : '📱 storis') 
+                    : newTask.type === 'tahrirlash' 
                     ? '✂️ video (qaytarilgan)' 
                     : '📹 video'
                 }
@@ -838,8 +880,8 @@ export default function KiritishPage() {
                 📝 Izoh (ixtiyoriy)
               </label>
               <textarea
-                value={newRecord.notes}
-                onChange={(e) => setNewRecord({ ...newRecord, notes: e.target.value })}
+                value={newTask.notes}
+                onChange={(e) => setNewTask({ ...newTask, notes: e.target.value })}
                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all outline-none"
                 rows={3}
                 placeholder="Qo'shimcha ma'lumot..."
@@ -858,7 +900,7 @@ export default function KiritishPage() {
                 </span>
               ) : (
                 <span className="flex items-center justify-center gap-2">
-                  ✅ {newRecord.count} ta Saqlash ({getMonthName(newRecord.work_month)} {newRecord.work_year})
+                  ✅ {newTask.count} ta Saqlash ({getMonthName(newTask.work_month)} {newTask.work_year})
                 </span>
               )}
             </button>
@@ -953,9 +995,9 @@ export default function KiritishPage() {
           </div>
         </div>
 
-        {groupedRecords.length > 0 ? (
+        {groupedTasks.length > 0 ? (
           <div className="space-y-4">
-            {groupedRecords.map((group, index) => (
+            {groupedTasks.map((group, index) => (
               <div key={index} className="bg-white rounded-xl p-6 shadow-lg border-2 border-gray-100">
                 <div className="flex items-center justify-between mb-4">
                   <div>
@@ -964,7 +1006,7 @@ export default function KiritishPage() {
                   </div>
                   <div className="text-right">
                     <div className="text-2xl font-bold text-gray-700">
-                      {group.records.length} marta
+                      {group.tasks.length} marta
                     </div>
                     <div className="text-xs text-gray-500">jami yozuv</div>
                   </div>
@@ -998,48 +1040,48 @@ export default function KiritishPage() {
                 </div>
 
                 <div className="space-y-2">
-                  {group.records.map(record => (
-                    <div key={record.id} className="bg-gray-50 rounded-lg p-3 flex items-center justify-between">
+                  {group.tasks.map(task => (
+                    <div key={task.id} className="bg-gray-50 rounded-lg p-3 flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="text-2xl">
-                          {record.type === 'editing' 
-                            ? record.content_type === 'post' ? '📄' : '📱'
-                            : record.type === 'tahrirlash' ? '✂️' : '📹'}
+                          {(task.task_type === 'editing' || task.task_type === 'montaj')
+                            ? task.content_type === 'post' ? '📄' : '📱'
+                            : task.task_type === 'tahrirlash' ? '✂️' : '📹'}
                         </div>
                         <div>
                           <p className="font-semibold">
-                            {record.count || 1}x {
-                              record.type === 'editing' 
-                                ? record.content_type === 'post' ? 'Post' : 'Storis'
-                                : record.type === 'tahrirlash' ? 'Tahrirlash' : 'Syomka'
+                            {task.count || 1}x {
+                              (task.task_type === 'editing' || task.task_type === 'montaj')
+                                ? task.content_type === 'post' ? 'Post' : 'Storis'
+                                : task.task_type === 'tahrirlash' ? 'Tahrirlash' : 'Syomka'
                             }
                           </p>
                           <p className="text-xs text-gray-500">
-                            {new Date(record.date).toLocaleDateString('uz-UZ', {
+                            {new Date(task.date).toLocaleDateString('uz-UZ', {
                               year: 'numeric',
                               month: 'long',
                               day: 'numeric'
-                            })} • {record.time || '---'}
+                            })}
                           </p>
-                          {record.start_time && record.end_time && (
+                          {task.start_time && task.end_time && (
                             <p className="text-xs text-blue-600 font-semibold mt-1">
-                              ⏱️ {record.start_time} - {record.end_time} ({formatDuration(record.duration_minutes)})
+                              ⏱️ {task.start_time} - {task.end_time} ({formatDuration(task.duration_minutes)})
                             </p>
                           )}
-                          {record.notes && (
-                            <p className="text-xs text-gray-600 mt-1">{record.notes}</p>
+                          {task.notes && (
+                            <p className="text-xs text-gray-600 mt-1">{task.notes}</p>
                           )}
                         </div>
                       </div>
                       <button
-                        onClick={() => handleDelete(record.id)}
+                        onClick={() => handleDelete(task.id, task.record_id)}
                         className={`transition-all ${
-                          deleteConfirm === record.id
+                          deleteConfirm === task.id
                             ? 'bg-red-500 text-white px-4 py-2 rounded-lg font-bold text-sm'
                             : 'text-red-500 hover:text-red-700 text-2xl'
                         }`}
                       >
-                        {deleteConfirm === record.id ? 'Tasdiqlash?' : '🗑️'}
+                        {deleteConfirm === task.id ? 'Tasdiqlash?' : '🗑️'}
                       </button>
                     </div>
                   ))}
