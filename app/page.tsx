@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase, type Task, type Mobilographer, type Project } from '@/lib/supabase'
 import Link from 'next/link'
 
 export default function DashboardPage() {
   const [projects, setProjects] = useState<any[]>([])
-  const [mobilographers, setMobilographers] = useState<any[]>([])
+  const [mobilographers, setMobilographers] = useState<Mobilographer[]>([])
   const [todayWorkload, setTodayWorkload] = useState<any[]>([])
   const [weeklyStats, setWeeklyStats] = useState<any[]>([])
   const [monthlyTarget, setMonthlyTarget] = useState<any>({ total: 0, completed: 0 })
@@ -43,19 +43,18 @@ export default function DashboardPage() {
 
     const projectsWithProgress = await Promise.all(
       (projectsData || []).map(async (project) => {
-        const { data: videos } = await supabase
-          .from('videos')
+        // ✅ UPDATED: Get completed tasks from tasks table
+        const { data: completedTasks } = await supabase
+          .from('tasks')
           .select('*')
           .eq('project_id', project.id)
-          .gte('created_at', firstDay.toISOString())
-          .lte('created_at', lastDay.toISOString())
+          .eq('status', 'completed')
+          .eq('task_type', 'editing')
+          .eq('content_type', 'post')
+          .gte('date', firstDay.toISOString().split('T')[0])
+          .lte('date', lastDay.toISOString().split('T')[0])
 
-        const completedPosts = videos?.filter(
-          v => v.record_id !== null && 
-               v.editing_status === 'completed' && 
-               v.content_type === 'post' && 
-               v.task_type === 'montaj'
-        ).length || 0
+        const completedPosts = completedTasks?.reduce((sum, task) => sum + (task.count || 1), 0) || 0
 
         const progress = project.monthly_target > 0 
           ? Math.round((completedPosts / project.monthly_target) * 100)
@@ -81,6 +80,7 @@ export default function DashboardPage() {
     const { data } = await supabase
       .from('mobilographers')
       .select('*')
+      .eq('is_active', true)
       .order('name')
 
     setMobilographers(data || [])
@@ -89,8 +89,9 @@ export default function DashboardPage() {
   const fetchTodayWorkload = async () => {
     const today = new Date().toISOString().split('T')[0]
 
-    const { data: records } = await supabase
-      .from('records')
+    // ✅ UPDATED: Get tasks instead of records
+    const { data: tasks } = await supabase
+      .from('tasks')
       .select(`
         *,
         mobilographers(id, name),
@@ -99,23 +100,28 @@ export default function DashboardPage() {
       .eq('date', today)
 
     const workloadByMobilographer = mobilographers.map(mob => {
-      const mobRecords = records?.filter(r => r.mobilographer_id === mob.id) || []
+      const mobTasks = tasks?.filter(t => t.mobilographer_id === mob.id) || []
       
       let totalDuration = 0
       let totalPost = 0
       let totalStoris = 0
       let totalSyomka = 0
+      let totalTahrirlash = 0
       
-      mobRecords.forEach(record => {
-        if (record.duration_minutes) {
-          totalDuration += record.duration_minutes
+      mobTasks.forEach(task => {
+        if (task.duration_minutes) {
+          totalDuration += task.duration_minutes
         }
-        const count = record.count || 1
-        if (record.type === 'editing') {
-          if (record.content_type === 'post') totalPost += count
-          else if (record.content_type === 'storis') totalStoris += count
-        } else if (record.type === 'filming') {
+        const count = task.count || 1
+        
+        // Count by task type
+        if (task.task_type === 'editing' || task.task_type === 'montaj') {
+          if (task.content_type === 'post') totalPost += count
+          else if (task.content_type === 'storis') totalStoris += count
+        } else if (task.task_type === 'filming' || task.task_type === 'syomka') {
           totalSyomka += count
+        } else if (task.task_type === 'tahrirlash') {
+          totalTahrirlash += count
         }
       })
 
@@ -158,12 +164,13 @@ export default function DashboardPage() {
         totalPost,
         totalStoris,
         totalSyomka,
+        totalTahrirlash,
         hours,
         status,
         statusLabel,
         statusColor,
         recommendation,
-        records: mobRecords
+        tasks: mobTasks
       }
     })
 
@@ -179,19 +186,20 @@ export default function DashboardPage() {
       date.setDate(today.getDate() - i)
       const dateStr = date.toISOString().split('T')[0]
 
-      const { data: records } = await supabase
-        .from('records')
+      // ✅ UPDATED: Get tasks instead of records
+      const { data: tasks } = await supabase
+        .from('tasks')
         .select('*')
         .eq('date', dateStr)
 
       let totalDuration = 0
       let totalWorks = 0
 
-      records?.forEach(record => {
-        if (record.duration_minutes) {
-          totalDuration += record.duration_minutes
+      tasks?.forEach(task => {
+        if (task.duration_minutes) {
+          totalDuration += task.duration_minutes
         }
-        totalWorks += record.count || 1
+        totalWorks += task.count || 1
       })
 
       stats.push({
@@ -232,7 +240,7 @@ export default function DashboardPage() {
   }
 
   const todayTotalDuration = todayWorkload.reduce((sum, w) => sum + w.totalDuration, 0)
-  const todayTotalWorks = todayWorkload.reduce((sum, w) => sum + w.totalPost + w.totalStoris + w.totalSyomka, 0)
+  const todayTotalWorks = todayWorkload.reduce((sum, w) => sum + w.totalPost + w.totalStoris + w.totalSyomka + w.totalTahrirlash, 0)
   const activeMobilographers = todayWorkload.filter(w => w.totalDuration > 0).length
   const monthlyProgress = monthlyTarget.total > 0 ? Math.round((monthlyTarget.completed / monthlyTarget.total) * 100) : 0
 
@@ -343,8 +351,8 @@ export default function DashboardPage() {
         </div>
 
         <div className="p-6 space-y-4">
-          {todayWorkload.length > 0 ? (
-            todayWorkload.map((workload, idx) => (
+          {todayWorkload.length > 0 && todayWorkload.some(w => w.totalDuration > 0) ? (
+            todayWorkload.filter(w => w.totalDuration > 0).map((workload, idx) => (
               <div key={idx} className={`border-2 rounded-xl p-4 ${
                 workload.statusColor === 'gray' ? 'border-gray-200 bg-gray-50' :
                 workload.statusColor === 'green' ? 'border-green-200 bg-green-50' :
@@ -373,41 +381,42 @@ export default function DashboardPage() {
                       {formatDuration(workload.totalDuration)}
                     </div>
                     <div className="text-xs text-gray-500">
-                      {workload.records.length} ta yozuv
+                      {workload.tasks.length} ta task
                     </div>
                   </div>
                 </div>
 
-                {workload.totalDuration > 0 && (
-                  <>
-                    <div className="flex items-center gap-2 mb-3">
-                      {workload.totalPost > 0 && (
-                        <span className="bg-green-100 text-green-700 px-3 py-1 rounded-lg text-sm font-semibold">
-                          📄 {workload.totalPost} Post
-                        </span>
-                      )}
-                      {workload.totalStoris > 0 && (
-                        <span className="bg-pink-100 text-pink-700 px-3 py-1 rounded-lg text-sm font-semibold">
-                          📱 {workload.totalStoris} Storis
-                        </span>
-                      )}
-                      {workload.totalSyomka > 0 && (
-                        <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg text-sm font-semibold">
-                          📹 {workload.totalSyomka} Syomka
-                        </span>
-                      )}
-                    </div>
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  {workload.totalPost > 0 && (
+                    <span className="bg-green-100 text-green-700 px-3 py-1 rounded-lg text-sm font-semibold">
+                      📄 {workload.totalPost} Post
+                    </span>
+                  )}
+                  {workload.totalStoris > 0 && (
+                    <span className="bg-pink-100 text-pink-700 px-3 py-1 rounded-lg text-sm font-semibold">
+                      📱 {workload.totalStoris} Storis
+                    </span>
+                  )}
+                  {workload.totalSyomka > 0 && (
+                    <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg text-sm font-semibold">
+                      📹 {workload.totalSyomka} Syomka
+                    </span>
+                  )}
+                  {workload.totalTahrirlash > 0 && (
+                    <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-lg text-sm font-semibold">
+                      ✏️ {workload.totalTahrirlash} Tahrirlash
+                    </span>
+                  )}
+                </div>
 
-                    <div className={`text-sm font-semibold px-3 py-2 rounded-lg ${
-                      workload.statusColor === 'green' ? 'bg-green-100 text-green-700' :
-                      workload.statusColor === 'blue' ? 'bg-blue-100 text-blue-700' :
-                      workload.statusColor === 'orange' ? 'bg-orange-100 text-orange-700' :
-                      'bg-red-100 text-red-700'
-                    }`}>
-                      💡 {workload.recommendation}
-                    </div>
-                  </>
-                )}
+                <div className={`text-sm font-semibold px-3 py-2 rounded-lg ${
+                  workload.statusColor === 'green' ? 'bg-green-100 text-green-700' :
+                  workload.statusColor === 'blue' ? 'bg-blue-100 text-blue-700' :
+                  workload.statusColor === 'orange' ? 'bg-orange-100 text-orange-700' :
+                  'bg-red-100 text-red-700'
+                }`}>
+                  💡 {workload.recommendation}
+                </div>
               </div>
             ))
           ) : (
