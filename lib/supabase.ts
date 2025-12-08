@@ -43,7 +43,8 @@ export type Video = {
 }
 
 // ✅ OLD RECORD TYPE (Keep for backward compatibility)
-export type Record = {
+// Renamed from 'Record' to 'WorkRecord' to avoid TypeScript conflict
+export type WorkRecord = {
   id: string
   mobilographer_id: string
   project_id: string
@@ -62,6 +63,9 @@ export type Record = {
   projects?: Project
   videos?: Video
 }
+
+// Backward compatibility alias
+export type Record = WorkRecord
 
 // ✅ NEW TASK TYPE (Primary data model)
 export type Task = {
