@@ -42,8 +42,7 @@ export type Video = {
   projects?: Project
 }
 
-// ✅ OLD RECORD TYPE (Keep for backward compatibility)
-// Renamed from 'Record' to 'WorkRecord' to avoid TypeScript conflict
+// ✅ OLD RECORD TYPE (Renamed to avoid TypeScript conflict)
 export type WorkRecord = {
   id: string
   mobilographer_id: string
@@ -63,9 +62,6 @@ export type WorkRecord = {
   projects?: Project
   videos?: Video
 }
-
-// Backward compatibility alias
-export type Record = WorkRecord
 
 // ✅ NEW TASK TYPE (Primary data model)
 export type Task = {
@@ -145,14 +141,14 @@ export const formatDuration = (minutes: number | null | undefined): string => {
  */
 export const formatTime = (time: string | null | undefined): string => {
   if (!time) return '-'
-  return time.substring(0, 5) // Returns HH:MM
+  return time.substring(0, 5)
 }
 
 /**
  * Get task type label in Uzbek
  */
 export const getTaskTypeLabel = (taskType: string): string => {
-  const labels: Record<string, string> = {
+  const labels: { [key: string]: string } = {
     'editing': 'Montaj',
     'montaj': 'Montaj',
     'filming': 'Syomka',
@@ -169,7 +165,7 @@ export const getTaskTypeLabel = (taskType: string): string => {
  */
 export const getContentTypeLabel = (contentType: string | null | undefined): string => {
   if (!contentType) return '-'
-  const labels: Record<string, string> = {
+  const labels: { [key: string]: string } = {
     'post': 'Post',
     'storis': 'Storis'
   }
@@ -180,7 +176,7 @@ export const getContentTypeLabel = (contentType: string | null | undefined): str
  * Get status label in Uzbek
  */
 export const getStatusLabel = (status: string): string => {
-  const labels: Record<string, string> = {
+  const labels: { [key: string]: string } = {
     'pending': 'Kutilmoqda',
     'in_progress': 'Jarayonda',
     'completed': 'Tugallangan',
